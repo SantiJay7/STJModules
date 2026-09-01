@@ -1,0 +1,22 @@
+# Build output
+build/
+*.o
+*.d
+*.so
+
+# Distribution
+dist/
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session notes
+SESION.md
+SESSION_*.md
+sesion*.txt
