@@ -1777,7 +1777,6 @@ static void wizarApplyUnits(WizarKeyboardWidget* w) {
 
 void init(Plugin* p) {
 	pluginInstance = p;
-	p->addModel(modelVocalLamma);
 	p->addModel(modelBalatube);
 	p->addModel(modelWizarKeyboard);
 }
