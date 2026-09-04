@@ -548,15 +548,15 @@ constexpr float Balatube::PVC_GAIN[];
 constexpr float Balatube::PVC_DECAY[];
 
 /** Direct-draw text label. NanoSVG (the renderer VCV Rack uses for panel
-background SVGs) does not support <text> elements, so labels baked into the
-SVG file are silently invisible in Rack. Drawing them ourselves with the
-window's UI font (same approach as VocalLamma) is the reliable alternative. */
-struct TextLabel : Widget {
+ background SVGs) does not support <text> elements, so labels baked into the
+ SVG file are silently invisible in Rack. Drawing them ourselves with the
+ window's UI font (same approach as VocalLamma) is the reliable alternative. */
+struct BalatubeTextLabel : Widget {
 	std::string text;
 	float fontSize;
 	NVGcolor color;
 
-	TextLabel(std::string t, float fs, NVGcolor c) : text(t), fontSize(fs), color(c) {}
+	BalatubeTextLabel(std::string t, float fs, NVGcolor c) : text(t), fontSize(fs), color(c) {}
 
 	void draw(const DrawArgs& args) override {
 		if (!APP->window->uiFont) return;
@@ -719,7 +719,7 @@ struct BalatubeWidget : ModuleWidget {
 	}
 
 	void addLabel(const std::string& text, math::Vec posMm, float fontSize, NVGcolor color) {
-		TextLabel* label = new TextLabel(text, fontSize, color);
+		BalatubeTextLabel* label = new BalatubeTextLabel(text, fontSize, color);
 		label->box.pos = mm2px(posMm);
 		addChild(label);
 	}

@@ -4,6 +4,9 @@ Collection of modules for VCV Rack 2 by STJ Modules (Santi Jay) — https://gith
 
 ## Modules
 
+### Vocal Lamma (`VocalLamma`)
+Tibetan monk formant vocal synthesizer with stereo ping-pong delay (OO-OH-AH-AY-EE, Rosenberg-Klatt glottal pulse).
+
 ### Balatube (`Balatube`)
 Physically-modeled percussion voice: MATERIAL sweeps from an ebony balafon / marimba bar (wood) to a closed-pipe PVC tube (odd harmonics 1:3:5…). Six-mode modal resonator, jet flanger, overdrive/crunch, full per-knob CV, stereo external-audio processing bus.
 
