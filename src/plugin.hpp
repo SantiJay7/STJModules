@@ -6,5 +6,7 @@ using namespace rack;
 // Declaración del Plugin instancia
 extern Plugin* pluginInstance;
 
-// Declaración del Modelo
+// Declaración de los Modelos
 extern Model* modelWizarKeyboard;
+extern Model* modelBalatube;
+extern Model* modelVocalLamma;

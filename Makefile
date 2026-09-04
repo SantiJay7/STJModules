@@ -4,6 +4,8 @@ SLUG := $(shell jq -r .slug plugin.json)
 VERSION := $(shell jq -r .version plugin.json)
 
 SOURCES += src/plugin.cpp
+SOURCES += src/Balatube.cpp
+SOURCES += src/VocalLamma.cpp
 
 DISTRIBUTABLES += res
 
