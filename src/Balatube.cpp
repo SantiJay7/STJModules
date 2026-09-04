@@ -569,9 +569,9 @@ struct TextLabel : Widget {
 };
 
 /** Raster logo drawn with nanoVG (same approach as VocalLamma): the panel
-SVG cannot embed raster images since the bundled nanoSVG ignores <image>
-elements, so the PNG is painted directly in draw(). */
-struct LogoWidget : Widget {
+ SVG cannot embed raster images since the bundled nanoSVG ignores <image>
+ elements, so the PNG is painted directly in draw(). */
+struct BalatubeLogoWidget : Widget {
 	std::string imagePath;
 
 	void draw(const DrawArgs& args) override {
@@ -656,7 +656,7 @@ struct BalatubeWidget : ModuleWidget {
 		// Logo, just under the title, in the C2-C3 gap (horizontally clear
 		// of Row 1's knobs since it sits between columns, not on one).
 		{
-			LogoWidget* logo = new LogoWidget;
+			BalatubeLogoWidget* logo = new BalatubeLogoWidget;
 			logo->imagePath = asset::plugin(pluginInstance, "res/Logo.png");
 			Vec logoSize = mm2px(Vec(12.f, 12.f));
 			Vec logoCenter = mm2px(Vec(45.75f, 20.f));

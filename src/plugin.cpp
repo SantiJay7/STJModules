@@ -1329,7 +1329,7 @@ struct DragGripWidget : widget::OpaqueWidget {
 // Logo (imagen PNG del panel)
 // ============================================================================
 
-struct LogoWidget : widget::TransparentWidget {
+struct WizarLogoWidget : widget::TransparentWidget {
 	// El logo se carga en draw() (no como miembro): el caché de la ventana
 	// libera el Image de forma segura al cerrar. Si lo guardáramos como
 	// miembro, su destructor correría tras destruirse la ventana/GL y haría
@@ -1434,7 +1434,7 @@ struct LogoWidget : widget::TransparentWidget {
 		{
 			logoWidget = new widget::TransformWidget;
 			logoWidget->scale(math::Vec(0.18f, 0.18f));
-			logoWidget->addChild(new LogoWidget());
+			logoWidget->addChild(new WizarLogoWidget());
 			logoWidget->box.pos = math::Vec(90.f - 260.f * 0.18f / 2.f, 328.f);
 			addChild(logoWidget);
 		}
