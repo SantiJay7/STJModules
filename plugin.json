@@ -42,6 +42,16 @@
         "mapping",
         "effect"
       ]
+    },
+    {
+      "slug": "membrane",
+      "name": "Membrane",
+      "description": "Modal drum with leather↔plastic morph (Taiko low ref at center), 4 modes, 2-voice choke, mono out",
+      "tags": [
+        "Percussion",
+        "Drum",
+        "Physical modeling"
+      ]
     }
   ]
 }

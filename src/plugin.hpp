@@ -10,3 +10,4 @@ extern Plugin* pluginInstance;
 extern Model* modelWizarKeyboard;
 extern Model* modelBalatube;
 extern Model* modelVocalLamma;
+extern Model* modelMembrane;

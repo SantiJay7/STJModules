@@ -6,6 +6,7 @@ VERSION := $(shell jq -r .version plugin.json)
 SOURCES += src/plugin.cpp
 SOURCES += src/Balatube.cpp
 SOURCES += src/VocalLamma.cpp
+SOURCES += src/Membrane.cpp
 
 DISTRIBUTABLES += res
 

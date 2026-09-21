@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="90" height="380" viewBox="0 0 90 380" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2b34"/><stop offset="1" stop-color="#15151a"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="90" height="380" fill="url(#bg)"/>
+  <rect x="5" y="5" width="80" height="370" rx="3" fill="none" stroke="#3a3a46" stroke-width="1.5"/>
+  <text x="45" y="20" text-anchor="middle" font-family="DejaVu Sans" font-weight="bold" font-size="9" fill="#e8b34a">MEMBRANE</text>
+  <text x="23.6" y="40" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">TUNE</text>
+  <text x="65" y="40" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
+  <text x="23.6" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">LEVEL</text>
+  <text x="65" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">MATERIAL</text>
+  <text x="23.6" y="146" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">HARM</text>
+  <text x="65" y="150" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">CHOKE</text>
+  <text x="23.6" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DRIVE</text>
+  <text x="65" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
+  <text x="23.6" y="239" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">VEL</text>
+  <text x="65" y="239" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">MAT</text>
+  <text x="23.6" y="280" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">GATE</text>
+  <text x="65" y="280" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">V/OCT</text>
+  <text x="23.6" y="333" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">L</text>
+  <text x="65" y="333" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">R</text>
+</svg>
