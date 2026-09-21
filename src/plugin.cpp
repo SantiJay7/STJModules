@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include <GLFW/glfw3.h>
 #include <componentlibrary.hpp>
+#include <ui/TextField.hpp>
 #include <thread>
 #include <osdialog.h>
 
@@ -21,7 +22,7 @@ Plugin* pluginInstance;
 
 static const float UNIT_W = 180.f;
 static const float PANEL_H = 380.f;
-static const float COLLAPSED_W = 50.f; // Ancho al colapsar (conmutador + línea)
+static const float COLLAPSED_W = 45.f; // 3 HP exactos (15 px/HP, estándar VCV)
 static const float KEY_X0 = 10.f, KEY_Y0 = 68.f;
 static const float KW = 37.f, KH = 37.f;
 static const float PX = 41.f, PY = 70.f;
@@ -114,12 +115,11 @@ static int64_t nowMs(); // definida al final del archivo (requiere <chrono>)
 static float wizarRand01(); // definida al final del archivo (modo Random)
 
 enum WizarParamIds {
-	CONTROL_PARAM, // Botón luminoso de modo control
 	NUM_PARAMS
 };
 
 enum WizarLightIds {
-	CONTROL_LIGHT,
+	EXCLUSIVE_LIGHT,
 	NUM_LIGHTS
 };
 
@@ -129,6 +129,8 @@ struct KeyConfig {
 	struct Target {
 		int64_t moduleId = -1;
 		int paramId = -1;
+		std::string pluginSlug;
+		std::string modelSlug;
 		engine::Module* target = NULL; // caché resuelta (nunca buscar en el hilo de audio)
 	};
 	std::vector<Target> targets;
@@ -136,14 +138,14 @@ struct KeyConfig {
 	bool toggle = true;   // solo Button
 	float hMin = 0.f;     // Fader/Knob: altura mínima (%)
 	float hMax = 1.f;     // Fader/Knob: altura máxima (%)
-	float velTime = 0.5f; // Fader/Knob: tiempo en alcanzar hMax (0.02s..60s)
+	float velTime = 0.f; // Fader/Knob: tiempo en alcanzar hMax (0 = instantáneo, hasta 60s)
 	float value = 0.f;    // valor actual normalizado dentro de [hMin,hMax]
 	bool pressed = false;
 	// Fader reversible: cada pulsacion alterna la direccion;
 	// el extremo (Height min/max) se lee SIEMPRE en vivo
 	bool faderActive = false;
 	bool faderUp = false;
-	bool morse = false;       // Modo Morse: pasos de 1% por pulsación (corto + / largo -)
+		bool morse = false;       // Modo Morse: corto +1% / largo -2% por pulsación
 	int64_t pressMs = 0;     // Morse: instante de la pulsación (ms)
 	bool random = false;     // Modo Random: valor aleatorio en [randMin,randMax] por pulsación
 	float randMin = 0.f;     // Random: límite inferior (% del rango del parámetro)
@@ -154,20 +156,26 @@ struct WizarKeyboardModule : Module {
 	int units = 1;
 	int layoutIdx = 1; // English por defecto
 	float morseThresholdMs = 250.f; // Umbral corto/largo para modo Morse (global, ms)
-	bool collapsed = false;     // Módulo recogido a la izquierda (solo conmutador + línea)
+	bool collapsed = false;     // Módulo recogido a la izquierda (solo LED + línea)
 	KeyConfig keys[MAX_UNITS * 16];
 	int pendingMapSlot = -1;
 
 	WizarKeyboardModule() {
 		config(NUM_PARAMS, 0, 0, NUM_LIGHTS);
-		configSwitch(CONTROL_PARAM, 0.f, 1.f, 0.f, "Modo control");
 	}
 
 	~WizarKeyboardModule() {
 	}
 
+	// Modo exclusivo: estado efímero de UI (menú/Escape), NO parámetro:
+	// así no contamina el historial de undo/redo. El step() del widget
+	// sincroniza el gancho GLFW con este flag.
+	bool exclusive = false;
 	bool isExclusive() {
-		return params[CONTROL_PARAM].getValue() > 0.5f;
+		return exclusive;
+	}
+	void setExclusive(bool v) {
+		exclusive = v;
 	}
 
 	bool slotValid(int slot) {
@@ -191,7 +199,9 @@ struct WizarKeyboardModule : Module {
 	}
 
 	/** Re-resuelve los punteros en caché. SOLO desde el hilo de UI.
-	    Desmapea automáticamente los targets cuyo módulo ya no existe. */
+	    Mantiene los targets aunque el módulo no exista aún (caso pegar selección
+	    donde los IDs cambian). Si el ID no se encuentra, intenta re-resolver por
+	    plugin/modelo + paramId para que los presets/selecciones sean portables. */
 	void refreshTargets() {
 		if (!APP || !APP->engine)
 			return;
@@ -206,13 +216,49 @@ struct WizarKeyboardModule : Module {
 				engine::Module* m = APP->engine->getModule(k.targets[j].moduleId);
 				if (m) {
 					k.targets[j].target = m;
+					if (m->model) {
+						k.targets[j].pluginSlug = m->model->plugin->slug;
+						k.targets[j].modelSlug = m->model->slug;
+					}
 					any = true;
 					j++;
+				} else if (!k.targets[j].pluginSlug.empty() && !k.targets[j].modelSlug.empty()) {
+					// Fallback portable: busca un módulo con mismo plugin/modelo y paramId
+					engine::Module* found = NULL;
+					if (APP->scene && APP->scene->rack) {
+						for (auto* mw : APP->scene->rack->getModules()) {
+							if (!mw->module || !mw->module->model) continue;
+							if (mw->module->model->plugin->slug == k.targets[j].pluginSlug &&
+							    mw->module->model->slug == k.targets[j].modelSlug) {
+								if (k.targets[j].paramId >= 0 && k.targets[j].paramId < (int)mw->module->paramQuantities.size()) {
+									found = mw->module;
+									break;
+								}
+							}
+						}
+					}
+					if (found) {
+						k.targets[j].moduleId = found->id;
+						k.targets[j].target = found;
+						any = true;
+						j++;
+					} else {
+						k.targets[j].target = NULL;
+						any = true; // mantiene el mapeo pendiente
+						j++;
+					}
 				} else {
-					k.targets.erase(k.targets.begin() + j);
+					// Sin plugin/modelo y módulo no encontrado: si es 0,0 espurio, borrarlo
+					if (k.targets[j].moduleId == 0 && k.targets[j].paramId == 0) {
+						k.targets.erase(k.targets.begin() + j);
+						continue;
+					}
+					k.targets[j].target = NULL;
+					any = true;
+					j++;
 				}
 			}
-			k.bound = any;
+			k.bound = any && !k.targets.empty();
 			if (!k.bound) {
 				k.pressed = false;
 				k.value = k.hMin;
@@ -259,9 +305,15 @@ struct WizarKeyboardModule : Module {
 			else
 				applyValue(slot, k.hMax);
 		} else {
-			// Fader/Knob reversible: cada pulsacion invierte la direccion
+			// Fader/Knob reversible: cada pulsacion invierte la direccion;
+			// con velTime 0 el salto es instantáneo (sin rampa)
 			k.faderUp = !k.faderUp;
-			k.faderActive = true;
+			if (k.velTime <= 0.f) {
+				applyValue(slot, k.faderUp ? k.hMax : k.hMin);
+				k.faderActive = false;
+			} else {
+				k.faderActive = true;
+			}
 		}
 	}
 
@@ -271,10 +323,9 @@ struct WizarKeyboardModule : Module {
 		if (!k.bound)
 			return;
 		if (k.morse) {
-			// Morse: corto = +1%, largo = -1% (ignora Height/Velocity)
+			// Morse: corto = +1%, largo = -2% (ignora Height/Velocity)
 			int64_t dur = nowMs() - k.pressMs;
-			float step = 0.01f;
-			float target = (dur < morseThresholdMs) ? k.value + step : k.value - step;
+			float target = (dur < morseThresholdMs) ? k.value + 0.01f : k.value - 0.02f;
 			applyValue(slot, target);
 			return;
 		}
@@ -283,14 +334,9 @@ struct WizarKeyboardModule : Module {
 			applyValue(slot, k.hMin);
 	}
 
-	/** Elimina el mapeo de una tecla (todos sus targets). */
+	/** Elimina el mapeo de una tecla y reinicia todos sus ajustes a fábrica. */
 	void unbind(int slot) {
-		KeyConfig& k = keys[slot];
-		k.faderActive = false;
-		k.bound = false;
-		k.targets.clear();
-		k.pressed = false;
-		k.value = k.hMin;
+		keys[slot] = KeyConfig();
 	}
 
 	/** Añade un target resuelto a la tecla (idempotente). Llamado por el
@@ -304,6 +350,10 @@ struct WizarKeyboardModule : Module {
 		t.moduleId = moduleId;
 		t.paramId = paramId;
 		t.target = mod;
+		if (mod && mod->model) {
+			t.pluginSlug = mod->model->plugin->slug;
+			t.modelSlug = mod->model->slug;
+		}
 		k.targets.push_back(t);
 		k.bound = true;
 		k.faderActive = false;
@@ -312,7 +362,7 @@ struct WizarKeyboardModule : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		lights[CONTROL_LIGHT].setBrightness(isExclusive() ? 1.f : 0.f);
+		lights[EXCLUSIVE_LIGHT].setBrightness(isExclusive() ? 1.f : 0.f);
 		// Rampas autonomas de fader/knob (reversibles por pulsacion)
 		for (int i = 0; i < MAX_UNITS * 16; i++) {
 			KeyConfig& k = keys[i];
@@ -352,13 +402,21 @@ struct WizarKeyboardModule : Module {
 			json_t* kJ = json_object();
 			json_object_set_new(kJ, "slot", json_integer(i));
 			json_object_set_new(kJ, "bound", json_boolean(k.bound));
-			// Targets (uno o varios)
+			// Targets (uno o varios) — se guarda plugin/modelo para que sea portable entre patches
 			if (k.bound) {
 				json_t* tJ = json_array();
 				for (const KeyConfig::Target& t : k.targets) {
 					json_t* o = json_object();
 					json_object_set_new(o, "moduleId", json_integer(t.moduleId));
 					json_object_set_new(o, "paramId", json_integer(t.paramId));
+					if (!t.pluginSlug.empty())
+						json_object_set_new(o, "plugin", json_string(t.pluginSlug.c_str()));
+					else if (t.target && t.target->model)
+						json_object_set_new(o, "plugin", json_string(t.target->model->plugin->slug.c_str()));
+					if (!t.modelSlug.empty())
+						json_object_set_new(o, "model", json_string(t.modelSlug.c_str()));
+					else if (t.target && t.target->model)
+						json_object_set_new(o, "model", json_string(t.target->model->slug.c_str()));
 					json_array_append_new(tJ, o);
 				}
 				json_object_set_new(kJ, "targets", tJ);
@@ -415,18 +473,34 @@ struct WizarKeyboardModule : Module {
 					KeyConfig::Target t;
 					t.moduleId = json_integer_value(json_object_get(o, "moduleId"));
 					t.paramId = json_integer_value(json_object_get(o, "paramId"));
+					json_t* plugJ = json_object_get(o, "plugin");
+					json_t* modelJ = json_object_get(o, "model");
+					if (plugJ && json_is_string(plugJ))
+						t.pluginSlug = json_string_value(plugJ);
+					if (modelJ && json_is_string(modelJ))
+						t.modelSlug = json_string_value(modelJ);
 					if (t.moduleId >= 0 && t.paramId >= 0)
 						k.targets.push_back(t);
 				}
 			} else {
-				// Legado: un solo target
-				int64_t mid = json_integer_value(json_object_get(kJ, "moduleId"));
-				int pid = json_integer_value(json_object_get(kJ, "paramId"));
-				if (mid >= 0 && pid >= 0) {
-					KeyConfig::Target t;
-					t.moduleId = mid;
-					t.paramId = pid;
-					k.targets.push_back(t);
+				// Legado: un solo target (solo si existen los campos)
+				json_t* midJ = json_object_get(kJ, "moduleId");
+				json_t* pidJ = json_object_get(kJ, "paramId");
+				if (midJ && pidJ && json_is_integer(midJ) && json_is_integer(pidJ)) {
+					int64_t mid = json_integer_value(midJ);
+					int pid = json_integer_value(pidJ);
+					if (mid >= 0 && pid >= 0) {
+						KeyConfig::Target t;
+						t.moduleId = mid;
+						t.paramId = pid;
+						json_t* plugJ = json_object_get(kJ, "plugin");
+						json_t* modelJ = json_object_get(kJ, "model");
+						if (plugJ && json_is_string(plugJ))
+							t.pluginSlug = json_string_value(plugJ);
+						if (modelJ && json_is_string(modelJ))
+							t.modelSlug = json_string_value(modelJ);
+						k.targets.push_back(t);
+					}
 				}
 			}
 			k.bound = !k.targets.empty();
@@ -436,7 +510,7 @@ struct WizarKeyboardModule : Module {
 			k.hMax = json_real_value(json_object_get(kJ, "hMax"));
 			k.hMin = std::max(0.f, std::min(k.hMin, k.hMax)); // suelo 0%
 			k.hMax = std::max(k.hMin, k.hMax);
-			k.velTime = json_real_value(json_object_get(kJ, "velTime"));
+			k.velTime = clamp((float) json_real_value(json_object_get(kJ, "velTime")), 0.f, 60.f);
 			k.morse = json_boolean_value(json_object_get(kJ, "morse"));
 			k.random = json_boolean_value(json_object_get(kJ, "random"));
 			json_t* rminJ = json_object_get(kJ, "randMin");
@@ -519,12 +593,37 @@ static WizarKeyboardModule* g_hookModule = NULL;
 // se hace en onButton/onHoverKey (eventos UI de Rack, igual que el menú
 // Delete), porque removeModule fuera de un evento UI corrompe el motor.
 
+// ¿Hay un campo de texto con foco? (para no tragar teclas al escribir)
+static bool wizarTextFocused() {
+	if (!APP || !APP->event)
+		return false;
+	for (widget::Widget* w = APP->event->selectedWidget; w; w = w->parent) {
+		if (dynamic_cast<ui::TextField*>(w))
+			return true;
+	}
+	return false;
+}
+
 static void wizarKeyCallback(GLFWwindow* win, int key, int scancode, int action, int mods) {
 	WizarKeyboardModule* m = g_hookModule;
+	// Atajos del sistema siempre vivos: Ctrl/Alt/Super pasan a Rack aunque
+	// CONTROL esté activo (Ctrl+Z, Ctrl+S, etc.). No disparan slots.
+	if ((mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT | GLFW_MOD_SUPER)) != 0) {
+		if (g_prevKeyCb)
+			g_prevKeyCb(win, key, scancode, action, mods);
+		return;
+	}
+	// No tragar teclas si hay un campo de texto enfocado (browser, menús...).
+	// Fail-open: ante la duda se deja pasar a Rack, nunca se come entrada.
+	if (m && m->isExclusive() && wizarTextFocused()) {
+		if (g_prevKeyCb)
+			g_prevKeyCb(win, key, scancode, action, mods);
+		return;
+	}
 	if (m && m->isExclusive()) {
 		// Salida de emergencia
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-			m->params[CONTROL_PARAM].setValue(0.f);
+			m->setExclusive(false);
 			if (g_prevKeyCb)
 				g_prevKeyCb(win, key, scancode, action, mods);
 			return;
@@ -692,15 +791,15 @@ static void wizarOverlayMsgs(int layout, const std::string& key, int n,
 		switch (layout) {
 			case 0:
 				msg = "Taste [" + key + "]: " + std::to_string(n) + " Parameter zugeordnet";
-				msg2 = "SHIFT + Klick f\xC3\xBCgt weitere hinzu \xC2\xB7 Enter beendet \xC2\xB7 Esc abbrechen";
+				msg2 = "SHIFT + Klick fügt hinzu · Klick auf Gemapptes entfernt · Rechtsklick beendet · Esc bricht ab";
 				break;
 			case 2:
 				msg = "Tecla [" + key + "]: " + std::to_string(n) + " par\xC3\xA1metros mapeados";
-				msg2 = "SHIFT + clic a\xC3\xB1ade m\xC3\xA1s \xC2\xB7 Enter termina \xC2\xB7 Esc cancela";
+				msg2 = "SHIFT + clic añade más · Clic en mapeado lo quita · Clic der termina · Esc cancela";
 				break;
 			default:
 				msg = "Key [" + key + "]: " + std::to_string(n) + " parameters mapped";
-				msg2 = "SHIFT + click adds more \xC2\xB7 Enter finishes \xC2\xB7 Esc cancels";
+				msg2 = "SHIFT + click adds more · Click a mapped one removes it · Right-click finishes · Esc cancels";
 				break;
 		}
 	}
@@ -869,7 +968,30 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 				rejectTimer = 120;
 				return;
 			}
-			// ownerSlot == slot => ya es de esta tecla: se ignora (idempotente)
+			// ownerSlot == slot => ya es de esta tecla: quitar SOLO ese target
+			// (el resto y sus ajustes quedan intactos).
+			{
+				KeyConfig& k = module->keys[slot];
+				bool found = false;
+				for (size_t ti = 0; ti < k.targets.size(); ti++) {
+					if (k.targets[ti].moduleId == moduleId && k.targets[ti].paramId == paramId) {
+						k.targets.erase(k.targets.begin() + ti);
+						found = true;
+						break;
+				}
+				}
+				if (found) {
+					if (k.targets.empty()) {
+						module->unbind(slot);
+						finish();
+						return;
+					}
+					bool shift = (e.mods & GLFW_MOD_SHIFT) != 0;
+					if (!shift)
+						finish();
+					return;
+				}
+			}
 			module->endLearn(slot, moduleId, paramId, targetMod);
 			bool shift = (e.mods & GLFW_MOD_SHIFT) != 0;
 			if (shift) {
@@ -1076,7 +1198,8 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 		if (isWizarDuplicate(module))
 			return;
 		bool noMods = (e.mods & RACK_MOD_MASK) == 0;
-		// En modo control no hay menús ni configuración: solo tocar
+		// En modo control el izquierdo sigue tocando, pero el derecho abre
+		// el menú para no tener que desactivar CONTROL al editar/mapear
 		if (noMods && e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
 			if (module->isExclusive()) {
 				module->keyPress(slot);
@@ -1089,8 +1212,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				e.consume(this);
 			}
 		}
-		else if (noMods && e.button == GLFW_MOUSE_BUTTON_RIGHT && e.action == GLFW_PRESS
-		         && !module->isExclusive()) {
+		else if (noMods && e.button == GLFW_MOUSE_BUTTON_RIGHT && e.action == GLFW_PRESS) {
 			createContextMenu();
 			e.consume(this);
 		}
@@ -1107,11 +1229,11 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 		[this](ui::Menu* m) {
 			m->addChild(createBoolMenuItem("Toggle", "",
 				[this]() { KeyConfig& k = module->keys[slot]; return !k.isFader && k.toggle; },
-				[this](bool) { KeyConfig& k = module->keys[slot]; k.isFader = false; k.toggle = true; }
+				[this](bool) { KeyConfig& k = module->keys[slot]; bool was = !k.isFader && k.toggle; k.isFader = false; k.toggle = true; if (!was && k.targets.empty()) startLearnFlow(module, slot); }
 			));
 			m->addChild(createBoolMenuItem("Momentary", "",
 				[this]() { KeyConfig& k = module->keys[slot]; return !k.isFader && !k.toggle; },
-				[this](bool) { KeyConfig& k = module->keys[slot]; k.isFader = false; k.toggle = false; }
+				[this](bool) { KeyConfig& k = module->keys[slot]; bool was = !k.isFader && !k.toggle; k.isFader = false; k.toggle = false; if (!was && k.targets.empty()) startLearnFlow(module, slot); }
 			));
 			m->addChild(new ui::MenuSeparator);
 			m->addChild(createMenuItem("Map...", "", [this]() {
@@ -1124,6 +1246,26 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			m->addChild(createMenuItem("Unmap", "", [this]() {
 				module->unbind(slot);
 			}, !module->keys[slot].bound));
+			// Etiqueta inactiva con el/los target(s) mapeado(s)
+			{
+				KeyConfig& k = module->keys[slot];
+				if (k.bound && !k.targets.empty()) {
+					std::string txt = "→ ";
+					for (size_t ti = 0; ti < k.targets.size(); ti++) {
+						auto &t = k.targets[ti];
+						if (t.target && t.paramId >= 0 && t.paramId < (int)t.target->paramQuantities.size()) {
+							auto pq = t.target->paramQuantities[t.paramId];
+							txt += std::string(t.target->model->plugin->slug) + "/" + pq->name;
+						} else if (!t.pluginSlug.empty()) {
+							txt += t.pluginSlug + "/" + t.modelSlug + ":" + std::to_string(t.paramId);
+						} else {
+							txt += "?" + std::to_string(t.moduleId) + ":" + std::to_string(t.paramId);
+						}
+						if (ti + 1 < k.targets.size()) txt += ", ";
+					}
+					m->addChild(createMenuLabel(txt));
+				}
+			}
 		}));
 
 		menu->addChild(createSubmenuItem("Fader/Knob", k.random ? "?" : (k.morse ? "~" : (k.isFader ? "" : "")),
@@ -1134,6 +1276,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				[this](bool) {
 					KeyConfig& k = module->keys[slot];
 					k.morse = !k.morse;
+					if (k.morse && k.targets.empty()) startLearnFlow(module, slot);
 					if (k.morse) {
 						k.isFader = true; // Morse es un control de parámetro
 						k.random = false; // Morse y Random son excluyentes
@@ -1145,6 +1288,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				[this](bool) {
 					KeyConfig& k = module->keys[slot];
 					k.random = !k.random;
+					if (k.random && k.targets.empty()) startLearnFlow(module, slot);
 					if (k.random) {
 						k.isFader = true; // Random es un control de parámetro
 						k.morse = false; // Morse y Random son excluyentes
@@ -1152,7 +1296,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				}
 			));
 			if (k.morse)
-				m->addChild(createMenuLabel("Pasos de 1%: corto sube, largo baja"));
+				m->addChild(createMenuLabel("Pasos +1%/-2%: corto sube, largo baja"));
 			if (k.random)
 				m->addChild(createMenuLabel("Random: valor al azar por pulsación"));
 			ui::Slider* sHmax = new ui::Slider;
@@ -1173,9 +1317,11 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			sHmin->quantity = qHmin;
 			sHmin->box.size.x = 160.f;
 			m->addChild(sHmin);
-			ui::Slider* sVel = new ui::Slider;
-			FloatQuantity* qVel = new FloatQuantity(&k.velTime, "Velocity", false, true);
-			qVel->onChange = [&k]() { k.isFader = true; };
+		ui::Slider* sVel = new ui::Slider;
+		FloatQuantity* qVel = new FloatQuantity(&k.velTime, "Velocity", false, true);
+		qVel->minV = 0.f; // 0 = instantáneo
+		qVel->maxV = 60.f;
+		qVel->onChange = [&k]() { k.isFader = true; };
 			qVel->disabled = k.morse || k.random;
 			sVel->quantity = qVel;
 			sVel->box.size.x = 160.f;
@@ -1208,6 +1354,26 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			m->addChild(createMenuItem("Unmap", "", [this]() {
 				module->unbind(slot);
 			}, !module->keys[slot].bound));
+			// Etiqueta inactiva con el/los target(s) mapeado(s)
+			{
+				KeyConfig& k = module->keys[slot];
+				if (k.bound && !k.targets.empty()) {
+					std::string txt = "→ ";
+					for (size_t ti = 0; ti < k.targets.size(); ti++) {
+						auto &t = k.targets[ti];
+						if (t.target && t.paramId >= 0 && t.paramId < (int)t.target->paramQuantities.size()) {
+							auto pq = t.target->paramQuantities[t.paramId];
+							txt += std::string(t.target->model->plugin->slug) + "/" + pq->name;
+						} else if (!t.pluginSlug.empty()) {
+							txt += t.pluginSlug + "/" + t.modelSlug + ":" + std::to_string(t.paramId);
+						} else {
+							txt += "?" + std::to_string(t.moduleId) + ":" + std::to_string(t.paramId);
+						}
+						if (ti + 1 < k.targets.size()) txt += ", ";
+					}
+					m->addChild(createMenuLabel(txt));
+				}
+			}
 		}, module->pendingMapSlot == slot));
 
 		menu->addChild(new ui::MenuSeparator);
@@ -1223,6 +1389,8 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 };
 
 static void startLearnFlow(WizarKeyboardModule* module, int slot) {
+	if (!module || module->pendingMapSlot >= 0)
+		return;
 	APP->scene->addChild(new LearnOverlay(module, slot));
 }
 
@@ -1321,7 +1489,7 @@ struct DragGripWidget : widget::OpaqueWidget {
 		// Etiqueta CONTROL bajo el botón luminoso
 		nvgFontSize(args.vg, 7);
 		nvgFillColor(args.vg, nvgRGB(0x9f, 0xb3, 0xc8));
-		nvgText(args.vg, 26.f, 60.f, "CONTROL", NULL);
+		nvgText(args.vg, 22.5f, 60.f, "CONTROL", NULL);
 	}
 };
 
@@ -1354,40 +1522,86 @@ struct WizarLogoWidget : widget::TransparentWidget {
 	}
 };
 
-	// Conmutador CONTROL decorativo para el preview del navegador (module == NULL).
-	// Se dibuja ENCENDIDO con el verde auténtico de Rack y centrado en (26,38),
-	// igual que el componente real, para que la miniatura quede idéntica.
-	struct PreviewControlWidget : widget::OpaqueWidget {
-		void draw(const DrawArgs& args) override {
-			Vec c = box.size.div(2);
-			// bisel oscuro
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, c.x, c.y, 11.f);
-			nvgFillColor(args.vg, nvgRGB(0x10, 0x10, 0x14));
-			nvgFill(args.vg);
-			nvgStrokeColor(args.vg, nvgRGB(0x00, 0x00, 0x00));
-			nvgStrokeWidth(args.vg, 1.0f);
-			nvgStroke(args.vg);
-			// halo verde
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, c.x, c.y, 9.f);
-			nvgFillColor(args.vg, nvgRGBA(0x90, 0xc7, 0x3e, 60));
-			nvgFill(args.vg);
-			// luz verde auténtica (SCHEME_GREEN)
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, c.x, c.y, 5.5f);
-			nvgFillColor(args.vg, nvgRGB(0x90, 0xc7, 0x3e));
-			nvgFill(args.vg);
-		}
-	};
-
 // ============================================================================
 // Widget principal
 // ============================================================================
 
+	// Zona del LED de estado: tooltip + Enter para conmutar el modo exclusivo.
+	// Transparente al raton (no consume botones); solo escucha tecla en hover.
+	struct ExclusiveHotzone : widget::TransparentWidget {
+		WizarKeyboardModule* module = NULL;
+		bool hovered = false;
+		math::Vec mousePos;
+		int64_t lastHoverMs = 0;
+		ExclusiveHotzone(WizarKeyboardModule* m) : module(m) {
+			box.pos = math::Vec(8.f, 24.f);
+			box.size = math::Vec(29.f, 28.f);
+		}
+		void onHover(const HoverEvent& e) override {
+			hovered = true;
+			mousePos = e.pos;
+			lastHoverMs = nowMs();
+		}
+		void step() override {
+			// Sin eventos de hover en 1.2s -> ocultar (respaldo de onLeave).
+			if (hovered && nowMs() - lastHoverMs > 1200)
+				hovered = false;
+			TransparentWidget::step();
+		}
+		void onLeave(const LeaveEvent& e) override {
+			hovered = false;
+		}
+		void onHoverKey(const HoverKeyEvent& e) override {
+			// Enter solo ACTIVA (dentro del modo el gancho se lo traga;
+			// salir es con ESC o desde el menu).
+			if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ENTER && module) {
+				module->setExclusive(true);
+				e.consume(this);
+			}
+		}
+		void draw(const DrawArgs& args) override {
+			if (!hovered)
+				return;
+			std::shared_ptr<window::Font> font = loadUiFont();
+			if (!fontOk(font))
+				return;
+			// Dos lineas, en el idioma de la distribucion (0=DE, 2=ES).
+			int lang = module ? module->layoutIdx : 1;
+			const char* l1;
+			const char* l2;
+			if (lang == 0)      { l1 = "Enter: aktivieren"; l2 = "ESC: deaktivieren"; }
+			else if (lang == 2) { l1 = "Enter: activar";    l2 = "ESC: desactivar"; }
+			else                { l1 = "Enter: enable";     l2 = "ESC: disable"; }
+			nvgFontFaceId(args.vg, font->handle);
+			nvgFontSize(args.vg, 14);
+			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+			float bounds[4];
+			nvgTextBounds(args.vg, 0, 0, l1, NULL, bounds);
+			float tw = bounds[2] - bounds[0];
+			nvgTextBounds(args.vg, 0, 0, l2, NULL, bounds);
+			float tw2 = bounds[2] - bounds[0];
+			if (tw2 > tw) tw = tw2;
+			// Arriba-derecha del cursor; si no cabe arriba, debajo.
+			float x = mousePos.x + 14.f, y = mousePos.y - 50.f;
+			if (y < -box.pos.y + 2.f)
+				y = mousePos.y + 16.f;
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x, y, tw + 14.f, 42.f, 3.f);
+			nvgFillColor(args.vg, nvgRGB(0x10, 0x10, 0x16));
+			nvgFill(args.vg);
+			nvgStrokeColor(args.vg, nvgRGB(0x3a, 0x3a, 0x46));
+			nvgStrokeWidth(args.vg, 1.f);
+			nvgStroke(args.vg);
+			nvgFillColor(args.vg, nvgRGB(0xe8, 0xb3, 0x4a));
+			nvgText(args.vg, x + 7.f, y + 5.f, l1, NULL);
+			nvgFillColor(args.vg, nvgRGB(0xdf, 0xe9, 0xf5));
+			nvgText(args.vg, x + 7.f, y + 23.f, l2, NULL);
+		}
+	};
+
 	struct WizarKeyboardWidget : ModuleWidget {
 		widget::TransformWidget* logoWidget = NULL;
-		float lastControl = 0.f;
+		bool lastExclusive = false;
 		bool killFlag = false;
 
 		void onShow(const ShowEvent& e) override {
@@ -1444,8 +1658,8 @@ struct WizarLogoWidget : widget::TransparentWidget {
 
 		if (module) {
 			// Botón luminoso de modo control (estilo VocalLamma)
-			addParam(createParamCentered<VCVBezelLatch>(Vec(26, 38), module, CONTROL_PARAM));
-			addChild(createLightCentered<VCVBezelLight<GreenLight>>(Vec(26, 38), module, CONTROL_LIGHT));
+			addChild(createLightCentered<SmallLight<GreenLight>>(Vec(22.5, 38), module, EXCLUSIVE_LIGHT));
+			addChild(new ExclusiveHotzone(dynamic_cast<WizarKeyboardModule*>(module)));
 			// Agarre de expansión (invisible: se arrastra el borde derecho)
 			addChild(new DragGripWidget(module, this));
 			// Solo registramos en el registro global si el módulo está en el
@@ -1454,14 +1668,12 @@ struct WizarLogoWidget : widget::TransparentWidget {
 				g_modules.push_back(module);
 		} else {
 			// Preview del navegador: conmutador CONTROL decorativo ENCENDIDO,
-			// centrado en (26,38) como el real.
-			PreviewControlWidget* pcw = new PreviewControlWidget();
-			pcw->box.pos = Vec(15, 27); // centro (26,38)
-			pcw->box.size = Vec(22, 22);
-			addChild(pcw);
+			// centrado en (22.5,38) como el real.
+			(void)0; // sin conmutador: el modo exclusivo vive en el menu
 		}
 
-		// Capa de badges
+	
+	// Capa de badges
 		if (!g_badges) {
 			g_badges = new BadgeOverlay();
 			APP->scene->rack->addChild(g_badges);
@@ -1638,11 +1850,11 @@ struct WizarLogoWidget : widget::TransparentWidget {
 				// (Re)instala el gancho si CONTROL está ON. Es idempotente y
 				// además recupera el gancho tras borrar un duplicado que lo
 				// sustrajo, aunque el estado de CONTROL no haya cambiado.
-				if (m->params[CONTROL_PARAM].getValue() > 0.5f)
+				if (m->isExclusive())
 					hookInstall(m);
 				else
 					hookRemove(m);
-				lastControl = m->params[CONTROL_PARAM].getValue();
+				lastExclusive = m->isExclusive();
 			}
 			float w = m->collapsed ? COLLAPSED_W : m->units * UNIT_W;
 			if (std::fabs(box.size.x - w) > 0.5f)
@@ -1664,6 +1876,12 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			return;
 
 		menu->addChild(new ui::MenuSeparator);
+
+		// Modo exclusivo de teclado (estado de UI, fuera del undo/redo)
+		menu->addChild(createBoolMenuItem("Modo CONTROL", "",
+			[m]() { return m->isExclusive(); },
+			[m](bool v) { m->setExclusive(v); }
+		));
 
 		// Distribución de teclado
 		menu->addChild(createSubmenuItem("Distribuci\xC3\xB3n", LAYOUT_NAMES[m->layoutIdx],
@@ -1717,12 +1935,17 @@ struct WizarLogoWidget : widget::TransparentWidget {
 	}
 
 	std::string presetDir() {
-		return asset::plugin(pluginInstance, "");
+		// Presets de usuario: carpeta escribible y estable entre cambios de slug.
+		// Antes usaba asset::plugin (carpeta del plugin, distinta para wizarkeyboard vs STJModules),
+		// por eso un preset guardado con el plugin viejo no aparecía al cargar con el nuevo.
+		std::string dir = asset::user("presets/STJModules/Wizar");
+		system::createDirectory(dir);
+		return dir;
 	}
 
 	void savePresetDialog() {
 		std::string dir = presetDir();
-		osdialog_filters* filters = osdialog_filters_parse("Preset Wizar:*.json");
+		osdialog_filters* filters = osdialog_filters_parse("Wizar preset:json");
 		char* pathC = osdialog_file(OSDIALOG_SAVE, dir.c_str(), "wizar-preset.json", filters);
 		osdialog_filters_free(filters);
 		if (!pathC)
@@ -1741,7 +1964,7 @@ struct WizarLogoWidget : widget::TransparentWidget {
 
 	void loadPresetDialog() {
 		std::string dir = presetDir();
-		osdialog_filters* filters = osdialog_filters_parse("Preset Wizar:*.json");
+		osdialog_filters* filters = osdialog_filters_parse("Wizar preset:json");
 		char* pathC = osdialog_file(OSDIALOG_OPEN, dir.c_str(), "", filters);
 		osdialog_filters_free(filters);
 		if (!pathC)

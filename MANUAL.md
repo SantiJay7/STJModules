@@ -25,7 +25,12 @@ The module is **not** in the VCV Library yet; it is shared as a development buil
 
 ## 2. Module layout
 
-- **CONTROL switch** (top‑left, green light): toggles exclusive keyboard mode.
+- **CONTROL LED** (top‑left, green light): shows exclusive keyboard mode.
+  Hover the LED area for a hint (in the keyboard layout language).
+  Enable the mode from the module context menu (**Modo CONTROL**) or by
+  pressing **Enter** while hovering the LED area; leave it with **Escape**
+  or from the menu. The mode is UI state, so switching it never touches
+  Rack's undo/redo history.
 - **Keys**: a grid of assignable keys (up to 46 across up to 3 units).
 - **Extensions**: drag the right edge to expand the module into more units
   (labeled EXT 2, EXT 3). More units = more keys.
@@ -36,30 +41,44 @@ The module is **not** in the VCV Library yet; it is shared as a development buil
 
 ## 3. Quick start — map a key
 
-1. Make sure **CONTROL is OFF** (the green light is dark). While CONTROL is ON,
-   Wizar Matrix captures the keyboard and you cannot use Rack's shortcuts
-   (including `Ctrl+D`).
-2. **Right‑click** a key → choose **Button** or **Fader/Knob** → **Map…**
+1. You can map keys with CONTROL either OFF or ON. Key combinations with
+   `Ctrl`, `Alt` or `Super` always reach Rack (e.g. `Ctrl+Z`, `Ctrl+S`),
+   even with CONTROL ON. Plain keys are captured while CONTROL is ON.
+2. **Right-click** a key → choose **Button** or **Fader/Knob** → pick a type
+   (Toggle, Momentary, Morse, Random). If the key has no mappings yet, the
+   mapping overlay opens straight away.
 3. The screen dims and shows the mapping overlay. **Click the control** you
-   want to drive (a knob, slider, switch, etc.).
-4. The mapping is saved. Turn **CONTROL ON** to play.
+   want to drive (a knob, slider, switch, etc.). Hold **Shift** and click
+   more controls to map several at once.
+4. Finish with **right-click** (`Esc` cancels). Clicking an already-mapped
+   control removes just that one, keeping the rest and their settings.
+5. The mapping is saved. Enable **Modo CONTROL** from the module's
+   right-click menu to play.
 
-To remove a mapping: right‑click the key → **Unmap**.
+
+Tip: one key can drive a button *and* a fader at once (e.g. a hit that opens
+a VCA while sweeping a filter) — just map both targets with Shift held.
+
+To remove a whole mapping: right-click the key → **Unmap**.
 
 ---
 
 ## 4. CONTROL mode (exclusive capture)
 
-When CONTROL is ON, Wizar Matrix takes over the computer keyboard so keypresses
-are sent to your mappings instead of Rack:
+When **Modo CONTROL** is enabled (right-click menu, green LED on), Wizar Matrix
+takes over the computer keyboard so keypresses are sent to your mappings
+instead of Rack:
 
-- All keys except **F1–F12** and **Space** are captured (they will not trigger
-  Rack or other modules).
+- Plain keys are captured (they will not trigger Rack or other modules),
+  except **F1–F12** and **Space**, which always pass through.
+- Combos with **Ctrl, Alt or Super** (e.g. `Ctrl+Z`, `Ctrl+S`) always reach
+  Rack, even with CONTROL ON — they never trigger notes.
+- Typing in text fields (browser search, menus…) is never captured.
 - **Escape** releases CONTROL immediately (handy if you get stuck).
 - Only **one** Wizar Matrix instance may use CONTROL at a time (see §8).
 
-Turn CONTROL OFF whenever you need the normal keyboard (e.g. to duplicate the
-module, type in fields, or use Rack shortcuts).
+Toggling the mode never touches Rack's undo/redo history, so `Ctrl+Z` always
+undoes your real edits.
 
 ---
 
@@ -111,7 +130,7 @@ control(s). Paste is disabled until something has been copied.
 ## 9. Collapse
 
 Drag the right edge far left to collapse the module to a slim strip (just the
-CONTROL switch + a line). Drag right again to expand. You can also collapse/
+CONTROL light + a line). Drag right again to expand. You can also collapse/
 expand from the module's right‑click menu. The module keeps working while
 collapsed.
 
