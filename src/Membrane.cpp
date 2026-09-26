@@ -48,7 +48,7 @@ struct Membrane : Module {
 	// Gain: mode1 (705Hz) domina el ataque, fundamental (125Hz) crece lento y persiste
 	static constexpr float PLASTIC_GAIN[]  = {0.55f, 0.90f, 0.55f, 0.45f, 0.40f, 0.25f, 0.12f, 0.05f};
 	// Decay: Djembe medios largos (madera), taiko grave contenido, darbuka seco
-	static constexpr float LEATHER_DECAY[] = {0.65f, 1.00f, 1.00f, 0.90f, 0.55f, 0.45f, 0.12f, 0.07f};
+	static constexpr float LEATHER_DECAY[] = {0.90f, 1.00f, 1.00f, 0.90f, 0.55f, 0.45f, 0.12f, 0.07f};
 	static constexpr float DJEMBE_DECAY[]  = {0.45f, 0.45f, 0.50f, 0.40f, 0.28f, 0.18f, 0.08f, 0.04f};
 	// Decay: fundamental sostenido (ring), parciales de carcasa mueren rápido (punch)
 	static constexpr float PLASTIC_DECAY[] = {0.26f, 0.20f, 0.22f, 0.22f, 0.26f, 0.24f, 0.10f, 0.06f};
