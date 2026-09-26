@@ -238,7 +238,7 @@ struct Membrane : Module {
 				// La simpática resuena larga en medios; el modo0 corto para no embarrar ≤100Hz
 				float symMult = (i == 0) ? 1.2f : 2.5f;
 				float symT60 = baseT60 * decay * 0.75f * symMult * decayMul * (1.f - 0.58f * taikoAmt);
-				float w = 2.f * M_PI * freq * ratio * 1.025f * pitchMul / sampleRate;
+				float w = 2.f * M_PI * freq * ratio * 1.000f * pitchMul / sampleRate;
 
 				envB[i] *= powf(0.001f, 1.f / (symT60 * sampleRate));
 				if (envB[i] < 1e-6f) envB[i] = 0.f;
