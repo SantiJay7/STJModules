@@ -43,7 +43,7 @@ struct Membrane : Module {
 	// Darbuka: parciales reales medidos (705/1020/1305/1585/1860/2346/3808Hz), inarmónicos, espaciado uniforme ~285Hz
 	static constexpr float PLASTIC_RATIO[] = {1.00f, 5.40f, 7.80f, 10.00f, 12.10f, 14.25f, 18.00f, 29.00f};
 	// Gain: Djembe proyecta medios 150-300Hz, taiko más grave, darbuka más brillante
-	static constexpr float LEATHER_GAIN[]  = {0.70f, 0.70f, 0.65f, 0.55f, 0.30f, 0.10f, 0.030f, 0.010f};
+	static constexpr float LEATHER_GAIN[]  = {0.70f, 0.50f, 0.50f, 0.45f, 0.30f, 0.10f, 0.030f, 0.010f};
 	static constexpr float DJEMBE_GAIN[]   = {0.80f, 0.12f, 0.12f, 0.20f, 0.20f, 0.32f, 0.050f, 0.020f};
 	// Gain: mode1 (705Hz) domina el ataque, fundamental (125Hz) crece lento y persiste
 	static constexpr float PLASTIC_GAIN[]  = {0.55f, 0.90f, 0.55f, 0.45f, 0.40f, 0.25f, 0.12f, 0.05f};
@@ -485,7 +485,7 @@ struct Membrane : Module {
 				float atkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
 				float relC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
 				limEnv[c] += (a - limEnv[c]) * (a > limEnv[c] ? atkC : relC);
-				float djembeThr = 0.032f + getDjembeAmt(material) * 0.088f + fmaxf(0.f, (material - 0.5f) * 2.f) * 0.080f;
+				float djembeThr = 0.032f + getDjembeAmt(material) * 0.088f + fmaxf(0.f, (material - 0.5f) * 2.f) * 0.080f + (1.f - clamp(material / 0.35f, 0.f, 1.f)) * 0.018f;
 				float g = djembeThr / (limEnv[c] + 1e-6f);
 				if (g > 1.f) g = 1.f;
 				voiceL *= g;
