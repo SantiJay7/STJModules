@@ -43,7 +43,7 @@ struct Membrane : Module {
 	// Darbuka: parciales reales medidos (705/1020/1305/1585/1860/2346/3808Hz), inarmónicos, espaciado uniforme ~285Hz
 	static constexpr float PLASTIC_RATIO[] = {1.00f, 5.40f, 7.80f, 10.00f, 12.10f, 14.25f, 18.00f, 29.00f};
 	// Gain: Djembe proyecta medios 150-300Hz, taiko más grave, darbuka más brillante
-	static constexpr float LEATHER_GAIN[]  = {0.70f, 0.50f, 0.50f, 0.45f, 0.30f, 0.10f, 0.030f, 0.010f};
+	static constexpr float LEATHER_GAIN[]  = {1.00f, 0.35f, 0.30f, 0.25f, 0.20f, 0.08f, 0.025f, 0.010f};
 	static constexpr float DJEMBE_GAIN[]   = {0.80f, 0.12f, 0.12f, 0.20f, 0.20f, 0.32f, 0.050f, 0.020f};
 	// Gain: mode1 (705Hz) domina el ataque, fundamental (125Hz) crece lento y persiste
 	static constexpr float PLASTIC_GAIN[]  = {0.55f, 0.90f, 0.55f, 0.45f, 0.40f, 0.25f, 0.12f, 0.05f};
@@ -220,7 +220,7 @@ struct Membrane : Module {
 			// --- Segunda membrana: desafinada y con más sustain (batido entre parches) ---
 			float outSym = 0.f;
 			// Djembe (material ~0.5) = una sola membrana: simpática a cero en el centro
-			float symGain = (material < 0.5f) ? (1.f - material * 2.f) * 0.45f : 0.f;
+			float symGain = (material < 0.5f) ? (1.f - material * 2.f) * 0.30f : 0.f;
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
 				if (material < 0.5f) {
