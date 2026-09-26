@@ -13,7 +13,7 @@
   <text x="23.6" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">LEVEL</text>
   <text x="65" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">MATERIAL</text>
   <text x="23.6" y="146" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">HARM</text>
-  <text x="65" y="150" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">CHOKE</text>
+  <text x="65" y="150" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">EXCITER</text>
   <text x="23.6" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DRIVE</text>
   <text x="65" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
   <text x="23.6" y="239" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">VEL</text>

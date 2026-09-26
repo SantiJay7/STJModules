@@ -13,7 +13,7 @@ struct Membrane : Module {
 		DECAY_PARAM,
 		LEVEL_PARAM,
 		MATERIAL_PARAM,
-		CHOKE_PARAM,
+		EXCITE_PARAM,
 		DRIVE_PARAM,
 		NUM_PARAMS
 	};
@@ -32,7 +32,6 @@ struct Membrane : Module {
 		NUM_OUTPUTS
 	};
 	enum LightIds {
-		CHOKE_LIGHT,
 		NUM_LIGHTS
 	};
 
@@ -140,7 +139,7 @@ struct Membrane : Module {
 			}
 		}
 
-		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f) {
+		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f, float excite = 1.f) {
 			samplesSinceTrig++;
 			// Cantidades de zona 0..1 (una sola vez por muestra)
 			float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
@@ -307,7 +306,7 @@ struct Membrane : Module {
 			float clickGain = 0.020f * (1.f - djA * 0.80f);
 			// Darbuka al tope: sin ruido (el ataque lo da el parcial tonal 705Hz)
 			clickGain *= (1.f - darbukaB);
-			float out = click * clickGain + outMode * 0.70f + outSym * 0.15f * (1.f - djA * 0.5f) + subOut * 0.09f * taikoA + sub2Out * 0.06f * taikoA + slapOut * 0.22f;
+			float out = click * clickGain * excite + outMode * 0.70f + outSym * 0.15f * (1.f - djA * 0.5f) + subOut * 0.09f * taikoA + sub2Out * 0.06f * taikoA + slapOut * 0.22f * excite;
 			// Imagen estéreo: membranas opuestas; (L+R)/2 = mezcla mono
 			float diff = (outMode * 0.70f - outSym * 0.15f) * 0.25f;
 			outL = out + diff;
@@ -352,7 +351,7 @@ struct Membrane : Module {
 		}
 	};
 
-	DrumVoice voices[2];
+	DrumVoice voices[3];
 	int lastVoice = 0;
 	int trigCount = 0;
 	dsp::SchmittTrigger trig[2];
@@ -407,7 +406,7 @@ struct Membrane : Module {
 		configParam(DECAY_PARAM, 0.05f, 4.f, 2.0f, "Decay", " s");
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.75f, "Level");
 		configParam(MATERIAL_PARAM, 0.f, 1.f, 0.f, "Material Leatherx2<>Leatherx1<>Plastic");
-		configParam(CHOKE_PARAM, 0.f, 1.f, 0.f, "Choke");
+		configParam(EXCITE_PARAM, 0.f, 1.f, 1.f, "Exciter");
 		configParam(DRIVE_PARAM, 0.f, 2.f, 0.5f, "Harmonics");
 		configInput(TRIG_INPUT, "Gate");
 		configInput(VOCT_INPUT, "V/Oct");
@@ -420,8 +419,6 @@ struct Membrane : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		bool choke = params[CHOKE_PARAM].getValue() > 0.5f;
-		lights[CHOKE_LIGHT].setBrightness(choke ? 1.f : 0.f);
 		float outMixL = 0.f;
 		float outMixR = 0.f;
 		int maxChan = 1;
@@ -434,6 +431,7 @@ struct Membrane : Module {
 			bool doTrig = trig[c].process(rescale(trigVal, 0.01f, 1.f, 0.f, 1.f));
 			float voct = inputs[VOCT_INPUT].getNormalPolyVoltage(0.f, c);
 			float harm = clamp(params[DRIVE_PARAM].getValue() + inputs[DRIVE_CV_INPUT].getNormalPolyVoltage(0.f, c) / 5.f, 0.f, 2.f);
+			float exc = clamp(params[EXCITE_PARAM].getValue(), 0.f, 1.f);
 			float material = clamp(params[MATERIAL_PARAM].getValue() + inputs[MATERIAL_CV_INPUT].getNormalPolyVoltage(0.f, c) / 3.f, 0.f, 1.f);
 			float baseT60 = clamp(params[DECAY_PARAM].getValue() + inputs[DECAY_CV_INPUT].getNormalPolyVoltage(0.f, c) / 3.f, 0.05f, 4.f);
 			float tune = params[TUNE_PARAM].getValue();
@@ -454,11 +452,7 @@ struct Membrane : Module {
 			level *= matGain;
 
 			if (doTrig) {
-				int v = choke ? (1 - lastVoice) : ((lastVoice + 1) % 2);
-				if (choke) {
-					voices[1 - v].exciteLeft = 0;
-					voices[1 - v].samplesSinceTrig = 99999;
-				}
+				int v = (lastVoice + 1) % 3;
 				int burst = std::max(1, (int)(0.012f * args.sampleRate)); // 12ms click
 				// Reseed por golpe: cada golpe único aunque alternen voces
 				voices[v].rng ^= (uint32_t)(trigCount * 2654435761u + 97u);
@@ -468,9 +462,9 @@ struct Membrane : Module {
 			}
 			float voiceL = 0.f;
 			float voiceR = 0.f;
-			for (int v = 0; v < 2; v++) {
+			for (int v = 0; v < 3; v++) {
 				float vL = 0.f, vR = 0.f;
-				voices[v].process(freq, baseT60, args.sampleRate, material, vL, vR, darbukaTime, harm);
+				voices[v].process(freq, baseT60, args.sampleRate, material, vL, vR, darbukaTime, harm, exc);
 				voiceL += vL;
 				voiceR += vR;
 			}
@@ -536,8 +530,7 @@ struct MembraneWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8, 40)), module, Membrane::LEVEL_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(22, 40)), module, Membrane::MATERIAL_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8, 56)), module, Membrane::DRIVE_PARAM));
-		addParam(createParamCentered<VCVBezelLatch>(mm2px(Vec(22, 56)), module, Membrane::CHOKE_PARAM));
-		addChild(createLightCentered<VCVBezelLight<RedLight>>(mm2px(Vec(22, 56)), module, Membrane::CHOKE_LIGHT));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(22, 56)), module, Membrane::EXCITE_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8, 72)), module, Membrane::DRIVE_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22, 72)), module, Membrane::DECAY_CV_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(8, 86)), module, Membrane::VELOCITY_INPUT));
