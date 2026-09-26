@@ -220,7 +220,7 @@ struct Membrane : Module {
 			// --- Segunda membrana: desafinada y con más sustain (batido entre parches) ---
 			float outSym = 0.f;
 			// Djembe (material ~0.5) = una sola membrana: simpática a cero en el centro
-			float symGain = (material < 0.5f) ? (1.f - material * 2.f) * 0.30f : 0.f;
+			float symGain = (material < 0.5f) ? (1.f - material * 2.f) * 0.15f : 0.f;
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
 				if (material < 0.5f) {
