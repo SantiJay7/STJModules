@@ -42,15 +42,15 @@ struct Membrane : Module {
 	static constexpr float DJEMBE_RATIO[]  = {1.00f, 1.52f, 2.05f, 3.10f, 4.60f, 6.90f, 10.50f, 15.50f};
 	// Darbuka: parciales reales medidos (705/1020/1305/1585/1860/2346/3808Hz), inarmónicos, espaciado uniforme ~285Hz
 	static constexpr float PLASTIC_RATIO[] = {1.00f, 5.40f, 7.80f, 10.00f, 12.10f, 14.25f, 18.00f, 29.00f};
-	// Gain: Djembe proyecta medios 150-300Hz, taiko más grave, darbuka más brillante
+	// Gain por zona (normalizados por modeSum)
 	static constexpr float LEATHER_GAIN[]  = {1.00f, 0.35f, 0.30f, 0.25f, 0.20f, 0.08f, 0.025f, 0.010f};
 	static constexpr float DJEMBE_GAIN[]   = {0.80f, 0.12f, 0.12f, 0.20f, 0.20f, 0.32f, 0.050f, 0.020f};
-	// Gain: mode1 (705Hz) domina el ataque, fundamental (125Hz) crece lento y persiste
+	// Darbuka: parciales medidos; mode1 (705Hz) ataca, fundamental (125Hz) persiste
 	static constexpr float PLASTIC_GAIN[]  = {0.55f, 0.90f, 0.55f, 0.45f, 0.40f, 0.25f, 0.12f, 0.05f};
-	// Decay: Djembe medios largos (madera), taiko grave contenido, darbuka seco
+	// Decay por zona (T60 relativo, x baseT60)
 	static constexpr float LEATHER_DECAY[] = {0.90f, 1.00f, 1.00f, 0.90f, 0.55f, 0.45f, 0.12f, 0.07f};
 	static constexpr float DJEMBE_DECAY[]  = {0.45f, 0.45f, 0.50f, 0.40f, 0.28f, 0.18f, 0.08f, 0.04f};
-	// Decay: fundamental sostenido (ring), parciales de carcasa mueren rápido (punch)
+	// Darbuka: fundamental con ring, carcasa solo en punch
 	static constexpr float PLASTIC_DECAY[] = {0.26f, 0.20f, 0.22f, 0.22f, 0.26f, 0.24f, 0.10f, 0.06f};
 
 	struct DrumVoice {
@@ -120,6 +120,10 @@ struct Membrane : Module {
 
 		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f) {
 			samplesSinceTrig++;
+			// Cantidades de zona 0..1 (una sola vez por muestra)
+			float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
+			float darbukaB = fmaxf(0.f, (material - 0.5f) * 2.f);
+			float taikoA = 1.f - clamp(material / 0.35f, 0.f, 1.f);
 
 			// --- Click de ataque: 12ms ruido brillante, pasa-bajos (sin spikes) ---
 			float click = 0.f;
@@ -127,7 +131,7 @@ struct Membrane : Module {
 				float raw = noise();
 				float hpf = raw - noiseState;
 				// Darbuka: palma seca más brillante (HPF más alto)
-				float hpCoef = 0.995f - 0.010f * fmaxf(0.f, (material - 0.5f) * 2.f);
+				float hpCoef = 0.995f - 0.010f * darbukaB;
 				noiseState = raw * (1.f - hpCoef) + noiseState * hpCoef;
 				click = hpf * 2.0f;
 				float cClk = 1.f - expf(-2.f * 3.14159265f * 4000.f / sampleRate);
@@ -137,29 +141,23 @@ struct Membrane : Module {
 				exciteLeft--;
 			}
 
-			// Pitch drop continuo: ×2.5 → ×1.0 (asienta rápido para cuerpo oscuro)
+			// Pitch drop continuo x2.0 -> x1.0 (asienta rapido, cuerpo oscuro)
 			float pitchT60 = baseT60 * 0.15f;
 			float pitchR = powf(0.001f, 1.f / (pitchT60 * sampleRate));
 			pitchMul = 1.0f + (pitchMul - 1.0f) * pitchR;
 			if (pitchMul < 1.0f) pitchMul = 1.0f;
 			// Darbuka: parciales metálicos estables, sin pitch-bend (el real no lo tiene)
-			float darbukaBlend = fmaxf(0.f, (material - 0.5f) * 2.f);
-			// Djembe: pitch-bend suave (×1.4, mano blanda) en vez de ×2.0 de maza
-			float djAmtP = 1.f - fabsf(material - 0.5f) * 2.f; if (djAmtP < 0.f) djAmtP = 0.f;
-			float pitchMulEff = 1.0f + (pitchMul - 1.0f) * (1.f - darbukaBlend) * (1.f - djAmtP * 0.8f);
+			float pitchMulEff = 1.0f + (pitchMul - 1.0f) * (1.f - darbukaB) * (1.f - djA * 0.8f);
 
 			// --- 8 modos × 2 pendientes: punch (transitorio) + ring (sustain con swell) ---
 			float outMode = 0.f;
 			float modeSum = 0.f;
 
-			// Swell del ring: tau 40ms desde 0.065 (pico ×0.5, cuerpo intacto)
-			// Darbuka: swell mucho más lento (el fundamental tarda en entrar, baja @50-100ms)
-			float swellTau = 0.04f * (1.f + darbukaBlend * 1.5f);
+			// Swell del ring (ralentiza la entrada del sustain; mas lento en darbuka)
+			float swellTau = 0.04f * (1.f + darbukaB * 1.5f);
 			float cR = 1.f - expf(-1.f / (swellTau * sampleRate));
 			atkR += (1.f - atkR) * cR;
 
-			// Taiko: cola más corta (compensa el boost de nivel de la zona)
-			float taikoAmt = 1.f - clamp(material / 0.35f, 0.f, 1.f);
 
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
@@ -176,7 +174,7 @@ struct Membrane : Module {
 				}
 
 				float punchT60 = baseT60 * decay * 0.10f * decayMul;
-				float ringT60 = baseT60 * decay * 1.50f * decayMul * (1.f - 0.58f * taikoAmt);
+				float ringT60 = baseT60 * decay * 1.50f * decayMul * (1.f - 0.58f * taikoA);
 				// Darbuka: la carcasa suena ~50ms (textura del ataque), luego muere
 				if (material > 0.5f && i > 0)
 					punchT60 = baseT60 * decay * 0.35f * decayMul;
@@ -195,11 +193,10 @@ struct Membrane : Module {
 					if (i == 0) { punchW = 0.05f; ringW = 0.60f; }
 					else        { punchW = 0.85f; ringW = 0.07f; }
 				} else {
-					float dAmt = 1.f - fabsf(material - 0.5f) * 2.f; if (dAmt < 0.f) dAmt = 0.f;
-					punchW = 0.60f + dAmt * 0.40f;
-					ringW  = 0.40f - dAmt * 0.25f;
+					punchW = 0.60f + djA * 0.40f;
+					ringW  = 0.40f - djA * 0.25f;
 					// Djembe: solo el fundamental sostiene; los parciales mueren con el punch (cola en seno puro)
-					if (i > 0) ringW *= (1.f - dAmt * 0.87f);
+					if (i > 0) ringW *= (1.f - djA * 0.87f);
 				}
 				float y = (envA[i] * punchW + envR[i] * atkR * ringW) * sinf(phaseA[i]);
 
@@ -210,17 +207,16 @@ struct Membrane : Module {
 			if (modeSum > 0.f) outMode /= modeSum;
 			// Djembe: modos con onset 3ms (el slap/HF manda primero, pico tonal ~8ms)
 			{
-				float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
 				if (djA > 0.5f) {
 					float q = (float)samplesSinceTrig / (0.003f * sampleRate);
 					if (q < 1.f) outMode *= 0.3f + 0.7f * (0.5f - 0.5f * cosf(3.14159265f * q));
 				}
 			}
 
-			// --- Segunda membrana: desafinada y con más sustain (batido entre parches) ---
+			// --- Segunda membrana: mismo tono, mas sustain, rampa lenta (cuerpo) ---
 			float outSym = 0.f;
 			// Djembe (material ~0.5) = una sola membrana: simpática a cero en el centro
-			float symGain = (material < 0.5f) ? (1.f - material * 2.f) * 0.15f : 0.f;
+			float symGain = (material < 0.5f) ? (1.f - djA) * 0.15f : 0.f;
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
 				if (material < 0.5f) {
@@ -237,14 +233,14 @@ struct Membrane : Module {
 
 				// La simpática resuena larga en medios; el modo0 corto para no embarrar ≤100Hz
 				float symMult = (i == 0) ? 1.2f : 2.5f;
-				float symT60 = baseT60 * decay * 0.75f * symMult * decayMul * (1.f - 0.58f * taikoAmt);
+				float symT60 = baseT60 * decay * 0.75f * symMult * decayMul * (1.f - 0.58f * taikoA);
 				float w = 2.f * M_PI * freq * ratio * 1.000f * pitchMul / sampleRate;
 
 				envB[i] *= powf(0.001f, 1.f / (symT60 * sampleRate));
 				if (envB[i] < 1e-6f) envB[i] = 0.f;
 				phaseB[i] += w;
 				if (phaseB[i] > 6.2831853f) phaseB[i] -= 6.2831853f;
-				outSym += envB[i] * sinf(phaseB[i]) * gain;
+				if (symGain > 0.f) outSym += envB[i] * sinf(phaseB[i]) * gain;
 			}
 
 			if (modeSum > 0.f) outSym /= modeSum;
@@ -266,7 +262,7 @@ struct Membrane : Module {
 			if (subEnv < 1e-6f) subEnv = 0.f;
 			subPhase += subW;
 			if (subPhase > 6.2831853f) subPhase -= 6.2831853f;
-			float subOut = subEnv * sinf(subPhase);
+			float subOut = (taikoA > 0.f) ? subEnv * sinf(subPhase) : 0.f;
 
 			// --- Sub-octava 2 (×0.25): sub-bass ---
 			float sub2Freq = freq * 0.25f;
@@ -277,12 +273,11 @@ struct Membrane : Module {
 			if (sub2Env < 1e-6f) sub2Env = 0.f;
 			sub2Phase += sub2W;
 			if (sub2Phase > 6.2831853f) sub2Phase -= 6.2831853f;
-			float sub2Out = sub2Env * sinf(sub2Phase);
+			float sub2Out = (taikoA > 0.f) ? sub2Env * sinf(sub2Phase) : 0.f;
 
-			// --- Slap de palma: racimo 2.0/2.5/2.8/3.6/4.3kHz, T60 35ms (ataque ruidoso) ---
+			// --- Slap de palma: racimo 1.0-4.3kHz, T60 50ms, solo djembe ---
 			float slapOut = 0.f;
 			{
-				float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
 				if (djA > 0.f && slapEnv > 1e-6f) {
 					static const float slapRatio[7] = {16.f, 20.f, 32.f, 39.f, 45.f, 57.f, 69.f};
 					static const float slapGain[7] = {0.20f, 0.16f, 0.22f, 0.18f, 0.22f, 0.22f, 0.16f};
@@ -296,27 +291,20 @@ struct Membrane : Module {
 				}
 			}
 
-			// --- Mezcla: click 5%, modo 45%, 2ª membrana 25%, sub1 15%, sub2 10% ---
-			// --- Mezcla 55: instrumento completo ---
-			float djembeAmt = 1.f - fabsf(material - 0.5f) * 2.f;
-			if (djembeAmt < 0.f) djembeAmt = 0.f;
+			// --- Mezcla (pesos; sub/slap/room se atenuan por zona) ---
 			// El sub solo pertenece al taiko (parche grande); djembe y darbuka no llevan sub-bajo
-			float subAtt = 1.f - clamp(material / 0.35f, 0.f, 1.f);
 			// Mano vs maza: el click de maza desaparece en djembe (mano) -> click suave de palma
-			float clickGain = 0.020f * (1.f - djembeAmt * 0.80f);
+			float clickGain = 0.020f * (1.f - djA * 0.80f);
 			// Darbuka al tope: sin ruido (el ataque lo da el parcial tonal 705Hz)
-			if (material > 0.5f) clickGain *= (1.f - (material - 0.5f) * 2.f);
-			float out = click * clickGain + outMode * 0.70f + outSym * 0.15f * (1.f - djembeAmt * 0.5f) + subOut * 0.09f * subAtt + sub2Out * 0.06f * subAtt + slapOut * 0.22f;
+			clickGain *= (1.f - darbukaB);
+			float out = click * clickGain + outMode * 0.70f + outSym * 0.15f * (1.f - djA * 0.5f) + subOut * 0.09f * taikoA + sub2Out * 0.06f * taikoA + slapOut * 0.22f;
 			// Imagen estéreo: membranas opuestas; (L+R)/2 = mezcla mono
 			float diff = (outMode * 0.70f - outSym * 0.15f) * 0.25f;
 			outL = out + diff;
 			outR = out - diff;
 
-			// Contacto de maza: fade-in raised-cosine ~6ms (ataque blando, sin slam)
-			// Darbuka: ataque inmediato de dedos (~2ms). Djembe: mano (~3ms)
-			float darbukaFade = fmaxf(0.f, (material - 0.5f) * 2.f);
-			float djFade = 1.f - fabsf(material - 0.5f) * 2.f; if (djFade < 0.f) djFade = 0.f;
-			float atkN = 0.006f * sampleRate * (1.f - fmaxf(darbukaFade, djFade * 0.8f) * 0.65f);
+			// Fade-in de ataque (maza 6ms, mano ~3ms, dedos ~2ms segun zona)
+			float atkN = 0.006f * sampleRate * (1.f - fmaxf(darbukaB, djA * 0.8f) * 0.65f);
 			if ((float)samplesSinceTrig < atkN) {
 				float p = (float)samplesSinceTrig / atkN;
 				float fade = 0.5f - 0.5f * cosf(3.14159265f * p);
@@ -440,7 +428,6 @@ struct Membrane : Module {
 			float darbukaTime = 1.f - 0.60f * fmaxf(0.f, (material - 0.5f) * 2.f);
 			float freq = 180.f * powf(2.f, (tune + voct * 12.f) / 12.f) * djembePitch * darbukaPitch;
 			freq = clamp(freq, 30.f, args.sampleRate * 0.45f);
-			float baseT60z = darbukaTime;
 			float vel = inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getNormalPolyVoltage(10.f, c) / 10.f, 0.f, 1.f) : 1.f;
 			float level = params[LEVEL_PARAM].getValue() * vel;
 			// Djembe necesita +10dB de nivel (sin tocar taiko/darbuka)
@@ -465,7 +452,7 @@ struct Membrane : Module {
 			float voiceR = 0.f;
 			for (int v = 0; v < 2; v++) {
 				float vL = 0.f, vR = 0.f;
-				voices[v].process(freq, baseT60, args.sampleRate, material, vL, vR, baseT60z, harm);
+				voices[v].process(freq, baseT60, args.sampleRate, material, vL, vR, darbukaTime, harm);
 				voiceL += vL;
 				voiceR += vR;
 			}
