@@ -223,7 +223,7 @@ struct Membrane : Module {
 					// Djembe: solo el fundamental sostiene; los parciales mueren con el punch (cola en seno puro)
 					if (i > 0) ringW *= (1.f - djA * 0.87f);
 				}
-				float y = (envA[i] * punchW + envR[i] * atkR * ringW) * sinf(phaseA[i]);
+				float y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW) * sinf(phaseA[i]);
 
 				modeSum += gain;
 				outMode += y * gain;
@@ -352,10 +352,13 @@ struct Membrane : Module {
 	};
 
 	DrumVoice voices[3];
+	int vChan[3] = {0, 0, 0}; // voz -> canal de entrada
+	float chFreq[3] = {0.f, 0.f, 0.f}, chLevel[3] = {0.f, 0.f, 0.f}, chMat[3] = {0.f, 0.f, 0.f};
+	float chT60[3] = {0.f, 0.f, 0.f}, chHarm[3] = {0.f, 0.f, 0.f}, chExc[3] = {0.f, 0.f, 0.f}, chDarbT[3] = {0.f, 0.f, 0.f};
 	int lastVoice = 0;
 	int trigCount = 0;
-	dsp::SchmittTrigger trig[2];
-	float limEnv[2] = {0.f, 0.f};
+	dsp::SchmittTrigger trig[3];
+	float limEnvG = 0.f;
 	float limSr = -1.f, limAtkC = 0.f, limRelC = 0.f;
 
 	// --- Room compartida: dos peines con damping (sala pequeña) ---
@@ -423,10 +426,9 @@ struct Membrane : Module {
 		float outMixR = 0.f;
 		int maxChan = 1;
 		for (int id : {TRIG_INPUT, VOCT_INPUT, VELOCITY_INPUT}) maxChan = std::max(maxChan, inputs[id].getChannels());
-		if (maxChan > 2) maxChan = 2;
-
+		if (maxChan > 3) maxChan = 3;
+		// Fase 1: entradas por canal (trigger + parametros; cada canal recuerda los suyos).
 		for (int c = 0; c < maxChan; c++) {
-			// Lecturas polifónicas seguras: nunca leer un canal que el puerto no tenga
 			float trigVal = inputs[TRIG_INPUT].getPolyVoltage(c);
 			bool doTrig = trig[c].process(rescale(trigVal, 0.01f, 1.f, 0.f, 1.f));
 			float voct = inputs[VOCT_INPUT].getNormalPolyVoltage(0.f, c);
@@ -435,74 +437,62 @@ struct Membrane : Module {
 			float material = clamp(params[MATERIAL_PARAM].getValue() + inputs[MATERIAL_CV_INPUT].getNormalPolyVoltage(0.f, c) / 3.f, 0.f, 1.f);
 			float baseT60 = clamp(params[DECAY_PARAM].getValue() + inputs[DECAY_CV_INPUT].getNormalPolyVoltage(0.f, c) / 3.f, 0.05f, 4.f);
 			float tune = params[TUNE_PARAM].getValue();
-			// BASE_FREQ 180Hz; djembe (centro) baja ~0.65× para cuerpo 60-80Hz
 			float djembePitch = 1.f - 0.30f * (1.f - fabsf(material - 0.5f) * 2.f);
 			if (djembePitch < 0.70f) djembePitch = 0.70f;
-			// Darbuka (tope) sube de tono: cuerpo metálico tenso
 			float darbukaPitch = 1.f + 0.45f * fmaxf(0.f, (material - 0.5f) * 2.f);
-			// Darbuka: tiempo ×0.4 en el tope (slap seco, muerto a 300ms)
 			float darbukaTime = 1.f - 0.60f * fmaxf(0.f, (material - 0.5f) * 2.f);
 			float freq = 180.f * powf(2.f, (tune + voct * 12.f) / 12.f) * djembePitch * darbukaPitch;
 			freq = clamp(freq, 30.f, args.sampleRate * 0.45f);
 			float vel = inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getNormalPolyVoltage(10.f, c) / 10.f, 0.f, 1.f) : 1.f;
 			float level = params[LEVEL_PARAM].getValue() * vel;
-			// Djembe necesita +10dB de nivel (sin tocar taiko/darbuka)
 			float matGain = 1.f + 10.0f * (1.f - fabsf(material - 0.5f) * 2.f) + 6.0f * fmaxf(0.f, (material - 0.5f) * 2.f) + 7.00f * (1.f - clamp(material / 0.35f, 0.f, 1.f));
 			if (matGain < 1.f) matGain = 1.f;
 			level *= matGain;
-
+			chFreq[c] = freq; chLevel[c] = level; chMat[c] = material;
+			chT60[c] = baseT60; chHarm[c] = harm; chExc[c] = exc; chDarbT[c] = darbukaTime;
 			if (doTrig) {
 				int v = (lastVoice + 1) % 3;
 				int burst = std::max(1, (int)(0.012f * args.sampleRate)); // 12ms click
-				// Reseed por golpe: cada golpe único aunque alternen voces
 				voices[v].rng ^= (uint32_t)(trigCount * 2654435761u + 97u);
 				trigCount++;
-				voices[v].trigger(burst, material);
+				vChan[v] = c;
+				voices[v].trigger(burst, chMat[c]);
 				lastVoice = v;
-			}
-			float voiceL = 0.f;
-			float voiceR = 0.f;
-			for (int v = 0; v < 3; v++) {
-				float vL = 0.f, vR = 0.f;
-				voices[v].process(freq, baseT60, args.sampleRate, material, vL, vR, darbukaTime, harm, exc);
-				voiceL += vL;
-				voiceR += vR;
-			}
-			voiceL *= level;
-			voiceR *= level;
-			float wetL = 0.f, wetR = 0.f;
-			roomProcess((voiceL + voiceR) * 0.5f, args.sampleRate, wetL, wetR);
-			float djembeAmt2 = getDjembeAmt(material);
-			float darbukaAmt2 = fmaxf(0.f, (material - 0.5f) * 2.f);
+		}
+		}
+		// Fase 2: cada voz suena con los parametros de SU canal (acorde real).
+		for (int v = 0; v < 3; v++) {
+			int c = vChan[v];
+			if (c >= maxChan) c = maxChan - 1;
+			float vL = 0.f, vR = 0.f;
+			voices[v].process(chFreq[c], chT60[c], args.sampleRate, chMat[c], vL, vR, chDarbT[c], chHarm[c], chExc[c]);
+			outMixL += vL * chLevel[c];
+			outMixR += vR * chLevel[c];
+		}
+		// Room global + limitador enlazado global.
+		float wetL = 0.f, wetR = 0.f;
+		roomProcess((outMixL + outMixR) * 0.5f, args.sampleRate, wetL, wetR);
+		{
+			float matAvg = 0.f;
+			for (int c = 0; c < maxChan; c++) matAvg += chMat[c];
+			matAvg /= (float)maxChan;
+			float djembeAmt2 = getDjembeAmt(matAvg);
+			float darbukaAmt2 = fmaxf(0.f, (matAvg - 0.5f) * 2.f);
 			wetL *= (1.f - djembeAmt2 * 0.9f) * (1.f - darbukaAmt2 * 0.85f);
 			wetR *= (1.f - djembeAmt2 * 0.9f) * (1.f - darbukaAmt2 * 0.85f);
-			voiceL += wetL;
-			voiceR += wetR;
-			// Limitador enlazado: misma ganancia en ambos lados (no rompe la imagen)
-			{
-				float a = fmaxf(fabsf(voiceL), fabsf(voiceR));
-				if (args.sampleRate != limSr) {
-					limSr = (float)args.sampleRate;
-					limAtkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
-					limRelC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
-				}
-				float atkC = limAtkC;
-				float relC = limRelC;
-				limEnv[c] += (a - limEnv[c]) * (a > limEnv[c] ? atkC : relC);
-				float djembeThr = 0.032f + getDjembeAmt(material) * 0.088f + fmaxf(0.f, (material - 0.5f) * 2.f) * 0.080f + (1.f - clamp(material / 0.35f, 0.f, 1.f)) * 0.018f;
-				float g = djembeThr / (limEnv[c] + 1e-6f);
-				if (g > 1.f) g = 1.f;
-				voiceL *= g;
-				voiceR *= g;
+			outMixL += wetL;
+			outMixR += wetR;
+			float a = fmaxf(fabsf(outMixL), fabsf(outMixR));
+			if (args.sampleRate != limSr) {
+				limSr = (float)args.sampleRate;
+				limAtkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
+				limRelC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
 			}
-			if (c == 0) {
-				outMixL = voiceL;
-				outMixR = voiceR;
-			}
-			else {
-				outMixL = (outMixL + voiceL) * 0.5f;
-				outMixR = (outMixR + voiceR) * 0.5f;
-			}
+			float djembeThr = 0.032f + getDjembeAmt(matAvg) * 0.088f + fmaxf(0.f, (matAvg - 0.5f) * 2.f) * 0.080f + (1.f - clamp(matAvg / 0.35f, 0.f, 1.f)) * 0.018f;
+			float g = djembeThr / (limEnvG + 1e-6f);
+			if (g > 1.f) g = 1.f;
+			outMixL *= g;
+			outMixR *= g;
 		}
 		outputs[OUT_OUTPUT].setVoltage(clamp(outMixL * 52.f, -10.f, 10.f));
 		outputs[OUT_OUTPUT].setChannels(1);
