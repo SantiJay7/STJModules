@@ -313,7 +313,7 @@ struct Membrane : Module {
 			}
 
 			// Harm: base sin barro (drive topado a 0.5) + excitador de agudos por encima
-			float baseDrive = fminf(drive, 0.5f);
+			float baseDrive = fminf(fmaxf(drive, 0.15f), 0.5f);
 			float comp = 0.8f * sqrtf(0.5f / fmaxf(baseDrive, 0.05f));
 			outL = tanhf(outL * baseDrive) * comp;
 			outR = tanhf(outR * baseDrive) * comp;
