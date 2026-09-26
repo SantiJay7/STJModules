@@ -210,20 +210,22 @@ struct Membrane : Module {
 				if (envA[i] < 1e-6f) envA[i] = 0.f;
 				envR[i] *= ringR[i];
 				if (envR[i] < 1e-6f) envR[i] = 0.f;
-				phaseA[i] += w;
-				if (phaseA[i] > 6.2831853f) phaseA[i] -= 6.2831853f;
-				float punchW, ringW;
-				if (material > 0.5f) {
-					// Darbuka: fundamental (i=0) retardado y sostenido; parciales de carcasa (i>0) instantáneos y cortos
-					if (i == 0) { punchW = 0.05f; ringW = 0.60f; }
-					else        { punchW = 0.85f; ringW = 0.07f; }
-				} else {
-					punchW = 0.60f + djA * 0.40f;
-					ringW  = 0.40f - djA * 0.25f;
-					// Djembe: solo el fundamental sostiene; los parciales mueren con el punch (cola en seno puro)
-					if (i > 0) ringW *= (1.f - djA * 0.87f);
+				float y = 0.f;
+				if (envA[i] > 0.f || envR[i] > 0.f) {
+					float punchW, ringW;
+					if (material > 0.5f) {
+						// Darbuka: fundamental retardado y sostenido; parciales cortos
+						if (i == 0) { punchW = 0.05f; ringW = 0.60f; }
+						else        { punchW = 0.85f; ringW = 0.07f; }
+					} else {
+						punchW = 0.60f + djA * 0.40f;
+						ringW  = 0.40f - djA * 0.25f;
+						if (i > 0) ringW *= (1.f - djA * 0.87f);
+					}
+					phaseA[i] += w;
+					if (phaseA[i] > 6.2831853f) phaseA[i] -= 6.2831853f;
+					y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW) * sinf(phaseA[i]);
 				}
-				float y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW) * sinf(phaseA[i]);
 
 				modeSum += gain;
 				outMode += y * gain;
@@ -253,7 +255,7 @@ struct Membrane : Module {
 				if (envB[i] < 1e-6f) envB[i] = 0.f;
 				phaseB[i] += w;
 				if (phaseB[i] > 6.2831853f) phaseB[i] -= 6.2831853f;
-				if (symGain > 0.f) outSym += envB[i] * sinf(phaseB[i]) * gain;
+				if (symGain > 0.f && envB[i] > 0.f) outSym += envB[i] * sinf(phaseB[i]) * gain;
 			}
 
 			if (modeSum > 0.f) outSym /= modeSum;
@@ -274,7 +276,7 @@ struct Membrane : Module {
 			if (subEnv < 1e-6f) subEnv = 0.f;
 			subPhase += subW;
 			if (subPhase > 6.2831853f) subPhase -= 6.2831853f;
-			float subOut = (taikoA > 0.f) ? subEnv * sinf(subPhase) : 0.f;
+			float subOut = (taikoA > 0.f && subEnv > 0.f) ? subEnv * sinf(subPhase) : 0.f;
 
 			// --- Sub-octava 2 (×0.25): sub-bass ---
 			float sub2Freq = freq * 0.25f;
@@ -283,7 +285,7 @@ struct Membrane : Module {
 			if (sub2Env < 1e-6f) sub2Env = 0.f;
 			sub2Phase += sub2W;
 			if (sub2Phase > 6.2831853f) sub2Phase -= 6.2831853f;
-			float sub2Out = (taikoA > 0.f) ? sub2Env * sinf(sub2Phase) : 0.f;
+			float sub2Out = (taikoA > 0.f && sub2Env > 0.f) ? sub2Env * sinf(sub2Phase) : 0.f;
 
 			// --- Slap de palma: racimo 1.0-4.3kHz, T60 50ms, solo djembe ---
 			float slapOut = 0.f;
@@ -322,21 +324,23 @@ struct Membrane : Module {
 				outR *= fade;
 			}
 
-			// Harm: base sin barro (drive topado a 0.5) + excitador de agudos por encima
-			float baseDrive = fminf(fmaxf(drive, 0.15f), 0.5f);
-			float comp = 0.8f * sqrtf(0.5f / fmaxf(baseDrive, 0.05f));
-			outL = tanhf(outL * baseDrive) * comp;
-			outR = tanhf(outR * baseDrive) * comp;
-			float excAmt = fmaxf(0.f, drive - 0.5f);
-			if (excAmt > 0.f) {
-				hpState += hpCc * ((outL + outR) * 0.5f - hpState);
-			hpState = (fabsf(hpState) < 1e-15f) ? 0.f : hpState;
-				float hiL = outL - hpState, hiR = outR - hpState;
-				float eg = excAmt * 0.35f;
-				outL += tanhf(hiL * (1.f + excAmt * 2.f)) * eg;
-				outR += tanhf(hiR * (1.f + excAmt * 2.f)) * eg;
+			// Tanhf+exciter solo si hay senal (ahorra en colas silenciosas)
+			if (fabsf(outL) + fabsf(outR) > 1e-6f) {
+				// Harm: base sin barro (drive topado a 0.5) + excitador de agudos por encima
+				float baseDrive = fminf(fmaxf(drive, 0.15f), 0.5f);
+				float comp = 0.8f * sqrtf(0.5f / fmaxf(baseDrive, 0.05f));
+				outL = tanhf(outL * baseDrive) * comp;
+				outR = tanhf(outR * baseDrive) * comp;
+				float excAmt = fmaxf(0.f, drive - 0.5f);
+				if (excAmt > 0.f) {
+					hpState += hpCc * ((outL + outR) * 0.5f - hpState);
+					hpState = (fabsf(hpState) < 1e-15f) ? 0.f : hpState;
+					float hiL = outL - hpState, hiR = outR - hpState;
+					float eg = excAmt * 0.35f;
+					outL += tanhf(hiL * (1.f + excAmt * 2.f)) * eg;
+					outR += tanhf(hiR * (1.f + excAmt * 2.f)) * eg;
+				}
 			}
-
 			active = (exciteLeft > 0) || (subEnv > 1e-6f) || (sub2Env > 1e-6f);
 			if (!active && djA > 0.f && slapEnv > 1e-6f)
 				active = true;
@@ -345,6 +349,7 @@ struct Membrane : Module {
 					if (envA[i] > 1e-6f || envR[i] > 1e-6f || envB[i] > 1e-6f) { active = true; break; }
 				}
 			}
+
 			// Gate seguridad
 			if (samplesSinceTrig > (int)(baseT60 * decayMul * 4.f * sampleRate)) {
 				outL = 0.f;
