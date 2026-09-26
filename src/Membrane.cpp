@@ -57,6 +57,14 @@ struct Membrane : Module {
 		float envA[NUM_MODES] = {};
 		float envR[NUM_MODES] = {};
 		float atkR = 0.1f;
+		// CachÃ© de coeficientes: se recalcula solo si cambia knob/sample-rate
+		float punchR[NUM_MODES] = {};
+		float ringR[NUM_MODES] = {};
+		float symR[NUM_MODES] = {};
+		float subRc = 0.f, sub2Rc = 0.f, pitchRc = 0.f;
+		float swellCc = 0.f, symCc = 0.f, hpCc = 0.f, slapRc = 0.f;
+		float coefT60 = -1.f, coefMat = -1.f, coefSr = -1.f, coefMul = -1.f;
+		bool active = false;
 		float phaseA[NUM_MODES] = {};
 		// Segunda membrana: parche opuesto acoplado por la caja de aire
 		float envB[NUM_MODES] = {};
@@ -118,12 +126,51 @@ struct Membrane : Module {
 			return (float)(rng & 0xFFFFFF) / 16777215.f;
 		}
 
+		void tableVals(float material, int i, float &ratio, float &gain, float &decay) {
+			if (material < 0.5f) {
+				float t = material * 2.f;
+				ratio = LEATHER_RATIO[i] + (DJEMBE_RATIO[i] - LEATHER_RATIO[i]) * t;
+				gain  = LEATHER_GAIN[i]  + (DJEMBE_GAIN[i]  - LEATHER_GAIN[i])  * t;
+				decay = LEATHER_DECAY[i] + (DJEMBE_DECAY[i] - LEATHER_DECAY[i]) * t;
+			} else {
+				float t = (material - 0.5f) * 2.f;
+				ratio = DJEMBE_RATIO[i] + (PLASTIC_RATIO[i] - DJEMBE_RATIO[i]) * t;
+				gain  = DJEMBE_GAIN[i]  + (PLASTIC_GAIN[i]  - DJEMBE_GAIN[i])  * t;
+				decay = DJEMBE_DECAY[i] + (PLASTIC_DECAY[i] - DJEMBE_DECAY[i]) * t;
+			}
+		}
+
 		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f) {
 			samplesSinceTrig++;
 			// Cantidades de zona 0..1 (una sola vez por muestra)
 			float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
 			float darbukaB = fmaxf(0.f, (material - 0.5f) * 2.f);
 			float taikoA = 1.f - clamp(material / 0.35f, 0.f, 1.f);
+			if (!active && exciteLeft <= 0) { outL = 0.f; outR = 0.f; return; }
+			// Coeficientes de decay: solo se recalculan si cambia algo
+			if (baseT60 != coefT60 || material != coefMat || sampleRate != coefSr || decayMul != coefMul) {
+				coefT60 = baseT60; coefMat = material; coefSr = sampleRate; coefMul = decayMul;
+				pitchRc = powf(0.001f, 1.f / ((baseT60 * 0.15f) * sampleRate));
+				subRc = powf(0.001f, 1.f / (0.40f * sampleRate));
+				sub2Rc = powf(0.001f, 1.f / (0.45f * sampleRate));
+				swellCc = 1.f - expf(-1.f / (0.04f * (1.f + darbukaB * 1.5f) * sampleRate));
+				symCc = 1.f - expf(-2.f * 3.14159265f * 500.f / sampleRate);
+				hpCc = 1.f - expf(-2.f * 3.14159265f * 1200.f / sampleRate);
+				slapRc = powf(0.001f, 1.f / (0.050f * sampleRate));
+				for (int i = 0; i < NUM_MODES; i++) {
+					float ratio, gain, decay;
+					tableVals(material, i, ratio, gain, decay);
+					float pT = baseT60 * decay * 0.10f * decayMul;
+					if (material > 0.5f && i > 0)
+						pT = baseT60 * decay * 0.35f * decayMul;
+					float rT = baseT60 * decay * 1.50f * decayMul * (1.f - 0.58f * taikoA);
+					float symMult = (i == 0) ? 1.2f : 2.5f;
+					float sT = baseT60 * decay * 0.75f * symMult * decayMul * (1.f - 0.58f * taikoA);
+					punchR[i] = powf(0.001f, 1.f / (pT * sampleRate));
+					ringR[i] = powf(0.001f, 1.f / (rT * sampleRate));
+					symR[i] = powf(0.001f, 1.f / (sT * sampleRate));
+				}
+			}
 
 			// --- Click de ataque: 12ms ruido brillante, pasa-bajos (sin spikes) ---
 			float click = 0.f;
@@ -142,9 +189,7 @@ struct Membrane : Module {
 			}
 
 			// Pitch drop continuo x2.0 -> x1.0 (asienta rapido, cuerpo oscuro)
-			float pitchT60 = baseT60 * 0.15f;
-			float pitchR = powf(0.001f, 1.f / (pitchT60 * sampleRate));
-			pitchMul = 1.0f + (pitchMul - 1.0f) * pitchR;
+			pitchMul = 1.0f + (pitchMul - 1.0f) * pitchRc;
 			if (pitchMul < 1.0f) pitchMul = 1.0f;
 			// Darbuka: parciales metálicos estables, sin pitch-bend (el real no lo tiene)
 			float pitchMulEff = 1.0f + (pitchMul - 1.0f) * (1.f - darbukaB) * (1.f - djA * 0.8f);
@@ -154,36 +199,17 @@ struct Membrane : Module {
 			float modeSum = 0.f;
 
 			// Swell del ring (ralentiza la entrada del sustain; mas lento en darbuka)
-			float swellTau = 0.04f * (1.f + darbukaB * 1.5f);
-			float cR = 1.f - expf(-1.f / (swellTau * sampleRate));
-			atkR += (1.f - atkR) * cR;
+			atkR += (1.f - atkR) * swellCc;
 
 
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
-				if (material < 0.5f) {
-					float t = material * 2.f;
-					ratio = LEATHER_RATIO[i] + (DJEMBE_RATIO[i] - LEATHER_RATIO[i]) * t;
-					gain  = LEATHER_GAIN[i]  + (DJEMBE_GAIN[i]  - LEATHER_GAIN[i])  * t;
-					decay = LEATHER_DECAY[i] + (DJEMBE_DECAY[i] - LEATHER_DECAY[i]) * t;
-				} else {
-					float t = (material - 0.5f) * 2.f;
-					ratio = DJEMBE_RATIO[i] + (PLASTIC_RATIO[i] - DJEMBE_RATIO[i]) * t;
-					gain  = DJEMBE_GAIN[i]  + (PLASTIC_GAIN[i]  - DJEMBE_GAIN[i])  * t;
-					decay = DJEMBE_DECAY[i] + (PLASTIC_DECAY[i] - DJEMBE_DECAY[i]) * t;
-				}
-
-				float punchT60 = baseT60 * decay * 0.10f * decayMul;
-				float ringT60 = baseT60 * decay * 1.50f * decayMul * (1.f - 0.58f * taikoA);
-				// Darbuka: la carcasa suena ~50ms (textura del ataque), luego muere
-				if (material > 0.5f && i > 0)
-					punchT60 = baseT60 * decay * 0.35f * decayMul;
-
+				tableVals(material, i, ratio, gain, decay);
 				float w = 2.f * M_PI * freq * ratio * pitchMulEff / sampleRate;
 
-				envA[i] *= powf(0.001f, 1.f / (punchT60 * sampleRate));
+				envA[i] *= punchR[i];
 				if (envA[i] < 1e-6f) envA[i] = 0.f;
-				envR[i] *= powf(0.001f, 1.f / (ringT60 * sampleRate));
+				envR[i] *= ringR[i];
 				if (envR[i] < 1e-6f) envR[i] = 0.f;
 				phaseA[i] += w;
 				if (phaseA[i] > 6.2831853f) phaseA[i] -= 6.2831853f;
@@ -219,24 +245,12 @@ struct Membrane : Module {
 			float symGain = (material < 0.5f) ? (1.f - djA) * 0.15f : 0.f;
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
-				if (material < 0.5f) {
-					float t = material * 2.f;
-					ratio = LEATHER_RATIO[i] + (DJEMBE_RATIO[i] - LEATHER_RATIO[i]) * t;
-					gain  = LEATHER_GAIN[i]  + (DJEMBE_GAIN[i]  - LEATHER_GAIN[i])  * t;
-				decay = LEATHER_DECAY[i] + (DJEMBE_DECAY[i] - LEATHER_DECAY[i]) * t;
-				} else {
-					float t = (material - 0.5f) * 2.f;
-					ratio = DJEMBE_RATIO[i] + (PLASTIC_RATIO[i] - DJEMBE_RATIO[i]) * t;
-					gain  = DJEMBE_GAIN[i]  + (PLASTIC_GAIN[i]  - DJEMBE_GAIN[i])  * t;
-					decay = DJEMBE_DECAY[i] + (PLASTIC_DECAY[i] - DJEMBE_DECAY[i]) * t;
-				}
+				tableVals(material, i, ratio, gain, decay);
 
 				// La simpática resuena larga en medios; el modo0 corto para no embarrar ≤100Hz
-				float symMult = (i == 0) ? 1.2f : 2.5f;
-				float symT60 = baseT60 * decay * 0.75f * symMult * decayMul * (1.f - 0.58f * taikoA);
 				float w = 2.f * M_PI * freq * ratio * 1.000f * pitchMul / sampleRate;
 
-				envB[i] *= powf(0.001f, 1.f / (symT60 * sampleRate));
+				envB[i] *= symR[i];
 				if (envB[i] < 1e-6f) envB[i] = 0.f;
 				phaseB[i] += w;
 				if (phaseB[i] > 6.2831853f) phaseB[i] -= 6.2831853f;
@@ -249,16 +263,14 @@ struct Membrane : Module {
 			float symRamp = samplesSinceTrig < 160 ? (float)samplesSinceTrig / 160.f : 1.f;
 			outSym *= symRamp;
 			// Parche lejano oído a través de la caja: pasa-bajos ~500Hz
-			float symC = 1.f - expf(-2.f * 3.14159265f * 500.f / sampleRate);
-			symLp += symC * (outSym - symLp);
+			symLp += symCc * (outSym - symLp);
+			symLp += symCc * (outSym - symLp);
 			outSym = symLp;
 
 			// --- Sub-octava 1 (×0.5): cuerpo grave fuerte ---
 			float subFreq = freq * 0.5f;
 			float subW = 2.f * M_PI * subFreq / sampleRate;
-			float subT60 = 0.40f;
-			float subR = powf(0.001f, 1.f / (subT60 * sampleRate));
-			subEnv *= subR;
+			subEnv *= subRc;
 			if (subEnv < 1e-6f) subEnv = 0.f;
 			subPhase += subW;
 			if (subPhase > 6.2831853f) subPhase -= 6.2831853f;
@@ -267,9 +279,7 @@ struct Membrane : Module {
 			// --- Sub-octava 2 (×0.25): sub-bass ---
 			float sub2Freq = freq * 0.25f;
 			float sub2W = 2.f * M_PI * sub2Freq / sampleRate;
-			float sub2T60 = 0.45f;
-			float sub2R = powf(0.001f, 1.f / (sub2T60 * sampleRate));
-			sub2Env *= sub2R;
+			sub2Env *= sub2Rc;
 			if (sub2Env < 1e-6f) sub2Env = 0.f;
 			sub2Phase += sub2W;
 			if (sub2Phase > 6.2831853f) sub2Phase -= 6.2831853f;
@@ -281,7 +291,7 @@ struct Membrane : Module {
 				if (djA > 0.f && slapEnv > 1e-6f) {
 					static const float slapRatio[7] = {16.f, 20.f, 32.f, 39.f, 45.f, 57.f, 69.f};
 					static const float slapGain[7] = {0.20f, 0.16f, 0.22f, 0.18f, 0.22f, 0.22f, 0.16f};
-					slapEnv *= powf(0.001f, 1.f / (0.050f * sampleRate));
+					slapEnv *= slapRc;
 					for (int k = 0; k < 7; k++) {
 						slapPh[k] += 2.f * 3.14159265f * freq * slapRatio[k] * pitchMulEff / sampleRate;
 						if (slapPh[k] > 6.2831853f) slapPh[k] -= 6.2831853f;
@@ -319,14 +329,21 @@ struct Membrane : Module {
 			outR = tanhf(outR * baseDrive) * comp;
 			float excAmt = fmaxf(0.f, drive - 0.5f);
 			if (excAmt > 0.f) {
-				float hpC = 1.f - expf(-2.f * 3.14159265f * 1200.f / sampleRate);
-				hpState += hpC * ((outL + outR) * 0.5f - hpState);
+				hpState += hpCc * ((outL + outR) * 0.5f - hpState);
 				float hiL = outL - hpState, hiR = outR - hpState;
 				float eg = excAmt * 0.35f;
 				outL += tanhf(hiL * (1.f + excAmt * 2.f)) * eg;
 				outR += tanhf(hiR * (1.f + excAmt * 2.f)) * eg;
 			}
 
+			active = (exciteLeft > 0) || (subEnv > 1e-6f) || (sub2Env > 1e-6f);
+			if (!active && djA > 0.f && slapEnv > 1e-6f)
+				active = true;
+			if (!active) {
+				for (int i = 0; i < NUM_MODES; i++) {
+					if (envA[i] > 1e-6f || envR[i] > 1e-6f || envB[i] > 1e-6f) { active = true; break; }
+				}
+			}
 			// Gate seguridad
 			if (samplesSinceTrig > (int)(baseT60 * decayMul * 4.f * sampleRate)) {
 				outL = 0.f;
@@ -340,6 +357,7 @@ struct Membrane : Module {
 	int trigCount = 0;
 	dsp::SchmittTrigger trig[2];
 	float limEnv[2] = {0.f, 0.f};
+	float limSr = -1.f, limAtkC = 0.f, limRelC = 0.f;
 
 	// --- Room compartida: dos peines con damping (sala pequeña) ---
 	std::vector<float> roomA, roomB;
@@ -469,8 +487,13 @@ struct Membrane : Module {
 			// Limitador enlazado: misma ganancia en ambos lados (no rompe la imagen)
 			{
 				float a = fmaxf(fabsf(voiceL), fabsf(voiceR));
-				float atkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
-				float relC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
+				if (args.sampleRate != limSr) {
+					limSr = (float)args.sampleRate;
+					limAtkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
+					limRelC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
+				}
+				float atkC = limAtkC;
+				float relC = limRelC;
 				limEnv[c] += (a - limEnv[c]) * (a > limEnv[c] ? atkC : relC);
 				float djembeThr = 0.032f + getDjembeAmt(material) * 0.088f + fmaxf(0.f, (material - 0.5f) * 2.f) * 0.080f + (1.f - clamp(material / 0.35f, 0.f, 1.f)) * 0.018f;
 				float g = djembeThr / (limEnv[c] + 1e-6f);
