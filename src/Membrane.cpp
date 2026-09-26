@@ -444,7 +444,7 @@ struct Membrane : Module {
 			float vel = inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getNormalPolyVoltage(10.f, c) / 10.f, 0.f, 1.f) : 1.f;
 			float level = params[LEVEL_PARAM].getValue() * vel;
 			// Djembe necesita +10dB de nivel (sin tocar taiko/darbuka)
-			float matGain = 1.f + 10.0f * (1.f - fabsf(material - 0.5f) * 2.f) + 6.0f * fmaxf(0.f, (material - 0.5f) * 2.f) + 3.48f * (1.f - clamp(material / 0.35f, 0.f, 1.f));
+			float matGain = 1.f + 10.0f * (1.f - fabsf(material - 0.5f) * 2.f) + 6.0f * fmaxf(0.f, (material - 0.5f) * 2.f) + 7.00f * (1.f - clamp(material / 0.35f, 0.f, 1.f));
 			if (matGain < 1.f) matGain = 1.f;
 			level *= matGain;
 
