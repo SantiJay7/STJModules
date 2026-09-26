@@ -265,6 +265,7 @@ struct Membrane : Module {
 			symLp += symCc * (outSym - symLp);
 			symLp += symCc * (outSym - symLp);
 			outSym = symLp;
+			if (fabsf(symLp) < 1e-15f) symLp = 0.f;
 
 			// --- Sub-octava 1 (×0.5): cuerpo grave fuerte ---
 			float subFreq = freq * 0.5f;
@@ -329,6 +330,7 @@ struct Membrane : Module {
 			float excAmt = fmaxf(0.f, drive - 0.5f);
 			if (excAmt > 0.f) {
 				hpState += hpCc * ((outL + outR) * 0.5f - hpState);
+			hpState = (fabsf(hpState) < 1e-15f) ? 0.f : hpState;
 				float hiL = outL - hpState, hiR = outR - hpState;
 				float eg = excAmt * 0.35f;
 				outL += tanhf(hiL * (1.f + excAmt * 2.f)) * eg;
@@ -386,7 +388,9 @@ struct Membrane : Module {
 		if (dB >= N) dB = N - 1;
 		float tapA = roomA[(roomPos - dA + N) % N];
 		float tapB = roomB[(roomPos - dB + N) % N];
+		if (fabsf(roomLpA) < 1e-15f) roomLpA = 0.f;
 		roomLpA += roomDampC * (tapA - roomLpA);
+		if (fabsf(roomLpB) < 1e-15f) roomLpB = 0.f;
 		roomLpB += roomDampC * (tapB - roomLpB);
 		roomA[roomPos] = x + 0.50f * roomLpA;
 		roomB[roomPos] = x + 0.50f * roomLpB;
@@ -488,6 +492,8 @@ struct Membrane : Module {
 				limAtkC = 1.f - expf(-1.f / (0.0002f * args.sampleRate));
 				limRelC = 1.f - expf(-1.f / (0.008f * args.sampleRate));
 			}
+			limEnvG += (a - limEnvG) * (a > limEnvG ? limAtkC : limRelC);
+			if (fabsf(limEnvG) < 1e-15f) limEnvG = 0.f;
 			float djembeThr = 0.032f + getDjembeAmt(matAvg) * 0.088f + fmaxf(0.f, (matAvg - 0.5f) * 2.f) * 0.080f + (1.f - clamp(matAvg / 0.35f, 0.f, 1.f)) * 0.018f;
 			float g = djembeThr / (limEnvG + 1e-6f);
 			if (g > 1.f) g = 1.f;
