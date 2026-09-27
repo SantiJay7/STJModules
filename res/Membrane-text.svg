@@ -7,7 +7,7 @@
   </defs>
   <rect x="0" y="0" width="90" height="380" fill="url(#bg)"/>
   <rect x="5" y="5" width="80" height="370" rx="3" fill="none" stroke="#3a3a46" stroke-width="1.5"/>
-  <g opacity="0.28" transform="translate(-10,230.4) scale(0.423)">
+  <g opacity="0.28" transform="translate(-10,248.4) scale(0.423)">
     <circle cx="130" cy="129" r="129" fill="#C99700"/>
     <g transform="translate(0.000000,258.000000) scale(0.100000,-0.100000)" fill="#141414" stroke="none">
       <path d="M802 2569 c2 -7 10 -15 17 -17 8 -3 12 1 9 9 -2 7 -10 15 -17 17 -8
