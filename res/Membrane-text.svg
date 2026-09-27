@@ -7,6 +7,7 @@
   </defs>
   <rect x="0" y="0" width="90" height="380" fill="url(#bg)"/>
   <rect x="5" y="5" width="80" height="370" rx="3" fill="none" stroke="#3a3a46" stroke-width="1.5"/>
+  <circle cx="45" cy="275" r="55" fill="none" stroke="#e8b34a" stroke-opacity="0.22" stroke-width="2"/>
   <text x="45" y="20" text-anchor="middle" font-family="DejaVu Sans" font-weight="bold" font-size="9" fill="#e8b34a">MEMBRANE</text>
   <text x="23.6" y="40" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">TUNE</text>
   <text x="65" y="40" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
