@@ -589,7 +589,7 @@ struct BalatubeLogoWidget : Widget {
 };
 
 struct BalatubeWidget : ModuleWidget {
-	BalatubeWidget(Balatube* module) {
+	explicit BalatubeWidget(Balatube* module) {
 		setModule(module);
 		setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/Balatube.svg")));
 

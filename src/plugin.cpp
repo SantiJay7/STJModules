@@ -178,11 +178,11 @@ struct WizarKeyboardModule : Module {
 		exclusive = v;
 	}
 
-	bool slotValid(int slot) {
+	static bool slotValid(int slot) {
 		return slot >= 0 && physKeyValid(slot);
 	}
 
-	bool physKeyValid(int slot) {
+	static bool physKeyValid(int slot) {
 		int u = slot / 16, r = (slot % 16) / 4, c = slot % 4;
 		return physKey(r, u * 4 + c) != -1;
 	}
@@ -343,9 +343,10 @@ struct WizarKeyboardModule : Module {
 	    overlay de aprendizaje; todos los targets comparten los ajustes. */
 	void endLearn(int slot, int64_t moduleId, int paramId, engine::Module* mod) {
 		KeyConfig& k = keys[slot];
-		for (const KeyConfig::Target& t : k.targets)
-			if (t.moduleId == moduleId && t.paramId == paramId)
-				return; // ya está: no duplicar
+		const bool yaEsta = std::any_of(k.targets.begin(), k.targets.end(),
+			[&](const KeyConfig::Target& t) { return t.moduleId == moduleId && t.paramId == paramId; });
+		if (yaEsta)
+			return; // ya está: no duplicar
 		KeyConfig::Target t;
 		t.moduleId = moduleId;
 		t.paramId = paramId;
@@ -383,10 +384,13 @@ struct WizarKeyboardModule : Module {
 
 	/** Devuelve la ranura que controla un parámetro, o -1 si ninguna. */
 	int findKeyByParam(int64_t moduleId, int paramId) {
-		for (int i = 0; i < MAX_UNITS * 16; i++)
-			for (const KeyConfig::Target& t : keys[i].targets)
-				if (t.moduleId == moduleId && t.paramId == paramId)
-					return i;
+		for (int i = 0; i < MAX_UNITS * 16; i++) {
+			const std::vector<KeyConfig::Target>& targets = keys[i].targets;
+			const bool hit = std::any_of(targets.begin(), targets.end(),
+				[&](const KeyConfig::Target& t) { return t.moduleId == moduleId && t.paramId == paramId; });
+			if (hit)
+				return i;
+		}
 		return -1;
 	}
 
@@ -558,7 +562,7 @@ static int slotForKeyGlfw(int key);
 // Portapapeles de comportamiento de tecla (solo ajustes, NO el mapeo)
 static KeyConfig g_keyClip;
 static bool g_hasClip = false;
-static void copyKeySettings(KeyConfig& k) {
+static void copyKeySettings(const KeyConfig& k) {
 	g_keyClip = KeyConfig();
 	g_keyClip.isFader = k.isFader;
 	g_keyClip.toggle = k.toggle;
@@ -665,7 +669,7 @@ static void hookInstall(WizarKeyboardModule* m) {
 	g_hookModule = m;
 }
 
-static void hookRemove(WizarKeyboardModule* m) {
+static void hookRemove(const WizarKeyboardModule* m) {
 	if (g_hookModule != m)
 		return;
 	GLFWwindow* win = (APP && APP->window) ? APP->window->win : NULL;
@@ -719,7 +723,7 @@ struct WizarKeyboardWidget;
 				continue;
 			auto rack = APP->scene->rack;
 			for (int i = 0; i < MAX_UNITS * 16; i++) {
-				KeyConfig& k = m->keys[i];
+				const KeyConfig& k = m->keys[i];
 				if (!k.bound)
 					continue;
 				for (const KeyConfig::Target& t : k.targets) {
@@ -727,12 +731,11 @@ struct WizarKeyboardWidget;
 					if (!mw)
 						continue;
 					math::Vec center(-1, -1);
-					for (app::ParamWidget* pw : mw->getParams()) {
-						if (pw->paramId == t.paramId) {
-							center = mw->box.pos.plus(pw->box.getCenter());
-							break;
-						}
-					}
+					std::vector<app::ParamWidget*> pws = mw->getParams();
+					auto itPw = std::find_if(pws.begin(), pws.end(),
+						[&](app::ParamWidget* pw) { return pw->paramId == t.paramId; });
+					if (itPw != pws.end())
+						center = mw->box.pos.plus((*itPw)->box.getCenter());
 					if (center.x < 0)
 						continue;
 					float bx = center.x + 10.f, by = center.y + 11.f;
@@ -780,7 +783,7 @@ static void wizarOverlayMsgs(int layout, const std::string& key, int n,
 				break;
 			case 2: // Español
 				msg = "MAP tecla [" + key + "]: haz clic sobre el control a gobernar";
-				msg2 = "Mant\xC3\xA9n SHIFT + clic para a\xC3\xB1adir m\xC3\xA1s \xC2\xB7 Clic der / Esc cancela";
+				msg2 = "Mantén SHIFT + clic para añadir más · Clic der / Esc cancela";
 				break;
 			default: // Inglés
 				msg = "MAP key [" + key + "]: click the control to drive";
@@ -921,10 +924,9 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 
 			// Candidato 2: compositar la cadena de transformacion real del arbol
 			math::Vec p2 = e.pos;
-			float z = 1.f;
 			app::RackScrollWidget* rs = APP->scene->rackScroll;
 			if (rs && rs->container && rs->zoomWidget) {
-				z = rs->getZoom();
+				float z = rs->getZoom();
 				// escena = rs + cont + zw + z*(rackPos + mundo)
 				// => mundo = ((escena - rs - cont - zw) / z) - rackPos
 				math::Vec acc = rs->box.pos
@@ -1087,7 +1089,7 @@ static void startLearnFlow(WizarKeyboardModule* module, int slot);
 static void requestSetUnits(WizarKeyboardWidget* w, int units);
 
 /** ¿Es `m` un duplicado que debe morir? (no es la instancia de menor id). */
-	static bool isWizarDuplicate(WizarKeyboardModule* m) {
+	static bool isWizarDuplicate(const WizarKeyboardModule* m) {
 		if (!m)
 			return false;
 		if (!APP || !APP->scene || !APP->scene->rack)
@@ -1101,10 +1103,7 @@ static void requestSetUnits(WizarKeyboardWidget* w, int units);
 	}
 	if (ids.size() <= 1)
 		return false;
-	int64_t minId = ids[0];
-	for (int64_t id : ids)
-		if (id < minId)
-			minId = id;
+	const int64_t minId = *std::min_element(ids.begin(), ids.end());
 	return m->id != minId;
 }
 
@@ -1220,7 +1219,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 
 	void createContextMenu() {
 		ui::Menu* menu = createMenu();
-		KeyConfig& k = module->keys[slot];
+		const KeyConfig& k = module->keys[slot];
 		std::string label = module->keyLabel(slot);
 
 		menu->addChild(createMenuLabel(std::string("Tecla [") + label + "]"));
@@ -1228,11 +1227,11 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 		menu->addChild(createSubmenuItem("Button", k.isFader ? "" : (k.toggle ? "Toggle" : "Momentary"),
 		[this](ui::Menu* m) {
 			m->addChild(createBoolMenuItem("Toggle", "",
-				[this]() { KeyConfig& k = module->keys[slot]; return !k.isFader && k.toggle; },
+				[this]() { const KeyConfig& k = module->keys[slot]; return !k.isFader && k.toggle; },
 				[this](bool) { KeyConfig& k = module->keys[slot]; bool was = !k.isFader && k.toggle; k.isFader = false; k.toggle = true; if (!was && k.targets.empty()) startLearnFlow(module, slot); }
 			));
 			m->addChild(createBoolMenuItem("Momentary", "",
-				[this]() { KeyConfig& k = module->keys[slot]; return !k.isFader && !k.toggle; },
+				[this]() { const KeyConfig& k = module->keys[slot]; return !k.isFader && !k.toggle; },
 				[this](bool) { KeyConfig& k = module->keys[slot]; bool was = !k.isFader && !k.toggle; k.isFader = false; k.toggle = false; if (!was && k.targets.empty()) startLearnFlow(module, slot); }
 			));
 			m->addChild(new ui::MenuSeparator);
@@ -1268,7 +1267,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			}
 		}));
 
-		menu->addChild(createSubmenuItem("Fader/Knob", k.random ? "?" : (k.morse ? "~" : (k.isFader ? "" : "")),
+		menu->addChild(createSubmenuItem("Fader/Knob", k.random ? "?" : (k.morse ? "~" : ""),
 		[this](ui::Menu* m) {
 			KeyConfig& k = module->keys[slot];
 			m->addChild(createBoolMenuItem("Morse", "",
@@ -1356,11 +1355,11 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			}, !module->keys[slot].bound));
 			// Etiqueta inactiva con el/los target(s) mapeado(s)
 			{
-				KeyConfig& k = module->keys[slot];
-				if (k.bound && !k.targets.empty()) {
+				const KeyConfig& kc = module->keys[slot];
+				if (kc.bound && !kc.targets.empty()) {
 					std::string txt = "→ ";
-					for (size_t ti = 0; ti < k.targets.size(); ti++) {
-						auto &t = k.targets[ti];
+					for (size_t ti = 0; ti < kc.targets.size(); ti++) {
+						auto &t = kc.targets[ti];
 						if (t.target && t.paramId >= 0 && t.paramId < (int)t.target->paramQuantities.size()) {
 							auto pq = t.target->paramQuantities[t.paramId];
 							txt += std::string(t.target->model->plugin->slug) + "/" + pq->name;
@@ -1369,7 +1368,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 						} else {
 							txt += "?" + std::to_string(t.moduleId) + ":" + std::to_string(t.paramId);
 						}
-						if (ti + 1 < k.targets.size()) txt += ", ";
+						if (ti + 1 < kc.targets.size()) txt += ", ";
 					}
 					m->addChild(createMenuLabel(txt));
 				}
@@ -1473,7 +1472,7 @@ struct DragGripWidget : widget::OpaqueWidget {
 	struct PanelLabelsWidget : widget::TransparentWidget {
 		WizarKeyboardModule* module;
 
-		PanelLabelsWidget(WizarKeyboardModule* m) : module(m) {
+		explicit PanelLabelsWidget(WizarKeyboardModule* m) : module(m) {
 		}
 
 			void draw(const DrawArgs& args) override {
@@ -1533,7 +1532,7 @@ struct WizarLogoWidget : widget::TransparentWidget {
 		bool hovered = false;
 		math::Vec mousePos;
 		int64_t lastHoverMs = 0;
-		ExclusiveHotzone(WizarKeyboardModule* m) : module(m) {
+		explicit ExclusiveHotzone(WizarKeyboardModule* m) : module(m) {
 			box.pos = math::Vec(8.f, 24.f);
 			box.size = math::Vec(29.f, 28.f);
 		}
@@ -1618,7 +1617,7 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			ModuleWidget::onButton(e);
 		}
 
-	WizarKeyboardWidget(WizarKeyboardModule* module) : ModuleWidget() {
+	explicit WizarKeyboardWidget(WizarKeyboardModule* module) : ModuleWidget() {
 		setModule(module);
 		setPanel(APP->window->loadSvg(asset::plugin(pluginInstance, "res/WizarKeyboard.svg")));
 
@@ -1666,11 +1665,9 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			// motor (el módulo temporal del preview NO debe registrarse).
 			if (APP && APP->engine && APP->engine->getModule(module->id))
 				g_modules.push_back(module);
-		} else {
-			// Preview del navegador: conmutador CONTROL decorativo ENCENDIDO,
-			// centrado en (22.5,38) como el real.
-			(void)0; // sin conmutador: el modo exclusivo vive en el menu
 		}
+		// En el preview del navegador no hay modulo, asi que no se crea el
+		// conmutador CONTROL decorativo (el modo exclusivo vive en el menu).
 
 	
 	// Capa de badges
@@ -2000,7 +1997,8 @@ static void wizarApplyUnits(WizarKeyboardWidget* w) {
 
 void init(Plugin* p) {
 	pluginInstance = p;
-	p->addModel(modelVocalLamma);
+	// Vocal Lamma NO se registra aqui: se publica como el plugin propio
+	// "VocalLamma". Registrarlo tambien duplicaria el slug de modulo.
 	p->addModel(modelBalatube);
 	p->addModel(modelWizarKeyboard);
 }
