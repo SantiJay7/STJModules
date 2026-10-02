@@ -632,15 +632,23 @@ static void wizarKeyCallback(GLFWwindow* win, int key, int scancode, int action,
 				g_prevKeyCb(win, key, scancode, action, mods);
 			return;
 		}
-		// Pasarelas permitidas: espacio, Enter y F1..F12.
-		// Enter abre el browser de Rack (Scene.cpp) y no es mapeable (la
-		// rejilla es solo alfanumerico), asi que no pisa ningun slot. En el
-		// overlay de mapeo lo consume el propio widget antes de que llegue
-		// al browser, asi que ambos usos conviven.
-		// Supr/Backspace y las flechas NO pasan: en Rack borran la seleccion
-		// y hacen pan del rack. Para escribir ya esta wizarTextFocused().
+		// Pasarelas: todo lo que NO es una de las 46 teclas asignables
+		// llega a Rack. La rejilla es solo alfanumerico
+		// (1-0 - = / Q-P [ ] / A-\\ / Z-/), asi que ninguna de estas
+		// teclas pisa un slot.
+		//   espacio, Enter, Tab, `   browser, foco de campo, sin binding
+		//   F1..F12                   las que Rack ya usa (manual, medidor
+		//                             de CPU, encuadrar, pantalla completa)
+		//   flechas, Supr, Retroceso  pan del rack y borrar la seleccion
+		// En el overlay de mapeo el Enter lo consume el propio widget antes
+		// de que llegue al browser, asi que ambos usos conviven.
+		// Para escribir ya esta wizarTextFocused() (fail-open).
 		bool passthrough = (key == GLFW_KEY_SPACE)
 		    || (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
+		    || (key == GLFW_KEY_TAB || key == GLFW_KEY_GRAVE_ACCENT)
+		    || (key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT
+		        || key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
+		    || (key == GLFW_KEY_DELETE || key == GLFW_KEY_BACKSPACE)
 		    || (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12);
 		if (!passthrough) {
 			int slot = slotForKeyGlfw(key);
