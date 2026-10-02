@@ -543,4 +543,4 @@ struct MembraneWidget : ModuleWidget {
 	}
 };
 
-Model* modelMembrane = createModel<Membrane, MembraneWidget>("membrane");
+Model* modelMembrane = createModel<Membrane, MembraneWidget>("Membrane");
