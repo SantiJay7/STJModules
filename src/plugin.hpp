@@ -9,5 +9,4 @@ extern Plugin* pluginInstance;
 // Declaración de los Modelos
 extern Model* modelWizarKeyboard;
 extern Model* modelBalatube;
-extern Model* modelVocalLamma;
 extern Model* modelMembrane;

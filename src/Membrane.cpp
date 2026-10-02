@@ -125,7 +125,7 @@ struct Membrane : Module {
 			return (float)(rng & 0xFFFFFF) / 16777215.f;
 		}
 
-		void tableVals(float material, int i, float &ratio, float &gain, float &decay) {
+		static void tableVals(float material, int i, float &ratio, float &gain, float &decay) {
 			if (material < 0.5f) {
 				float t = material * 2.f;
 				ratio = LEATHER_RATIO[i] + (DJEMBE_RATIO[i] - LEATHER_RATIO[i]) * t;
@@ -204,7 +204,6 @@ struct Membrane : Module {
 			for (int i = 0; i < NUM_MODES; i++) {
 				float ratio, gain, decay;
 				tableVals(material, i, ratio, gain, decay);
-				float w = 2.f * M_PI * freq * ratio * pitchMulEff / sampleRate;
 
 				envA[i] *= punchR[i];
 				if (envA[i] < 1e-6f) envA[i] = 0.f;
@@ -222,6 +221,7 @@ struct Membrane : Module {
 						ringW  = 0.40f - djA * 0.25f;
 						if (i > 0) ringW *= (1.f - djA * 0.87f);
 					}
+					float w = 2.f * M_PI * freq * ratio * pitchMulEff / sampleRate;
 					phaseA[i] += w;
 					if (phaseA[i] > 6.2831853f) phaseA[i] -= 6.2831853f;
 					y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW) * sinf(phaseA[i]);
@@ -523,7 +523,7 @@ constexpr float Membrane::DJEMBE_DECAY[];
 constexpr float Membrane::PLASTIC_DECAY[];
 
 struct MembraneWidget : ModuleWidget {
-	MembraneWidget(Membrane* module) {
+	explicit MembraneWidget(Membrane* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/Membrane.svg")));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(8, 22)), module, Membrane::TUNE_PARAM));

@@ -12,12 +12,12 @@ quotient (fraction of the period the glottis is open), `aq` the asymmetry
 a voice-like, "monk" source with strong vowel formants. */
 static inline float glottalPulse(float ph, float oq, float aq) {
 	float op = oq * aq;
-	float cq = oq * (1.f - aq);
 	if (ph <= op) {
 		float t = ph / op;
 		return 3.f * t * t - 2.f * t * t * t;
 	}
 	else if (ph <= oq) {
+		float cq = oq * (1.f - aq);
 		float t = (ph - op) / cq;
 		float m = 1.f - t;
 		return m * m;
@@ -235,12 +235,9 @@ struct VocalLamma : Module {
 	}
 
 	void removeMidiNote(uint8_t note) {
-		for (auto it = midiNotes.begin(); it != midiNotes.end(); ++it) {
-			if (*it == note) {
-				midiNotes.erase(it);
-				return;
-			}
-		}
+		auto it = std::find(midiNotes.begin(), midiNotes.end(), note);
+		if (it != midiNotes.end())
+			midiNotes.erase(it);
 	}
 
 	static void getFormants(float v, float* out) {
@@ -483,7 +480,7 @@ struct VocalLammaLogoWidget : Widget {
 
 
 struct VocalLammaWidget : ModuleWidget {
-	VocalLammaWidget(VocalLamma* module) {
+	explicit VocalLammaWidget(VocalLamma* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/VocalLamma.svg")));
 
