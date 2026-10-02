@@ -1525,7 +1525,7 @@ struct WizarLogoWidget : widget::TransparentWidget {
 // Widget principal
 // ============================================================================
 
-	// Zona del LED de estado: tooltip + Enter para conmutar el modo exclusivo.
+	// Zona del LED de estado: tooltip + F6 para conmutar el modo exclusivo.
 	// Transparente al raton (no consume botones); solo escucha tecla en hover.
 	struct ExclusiveHotzone : widget::TransparentWidget {
 		WizarKeyboardModule* module = NULL;
@@ -1551,9 +1551,11 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			hovered = false;
 		}
 		void onHoverKey(const HoverKeyEvent& e) override {
-			// Enter solo ACTIVA (dentro del modo el gancho se lo traga;
-			// salir es con ESC o desde el menu).
-			if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ENTER && module) {
+			// F6 solo ACTIVA (dentro del modo el gancho lo deja pasar a Rack;
+			// salir es con ESC o desde el menu). Enter queda libre para el
+			// browser de Rack, que era el choque que motivó el cambio.
+			// F1/F3/F4/F11 los usa Rack, asi que F6 es la primera libre.
+			if (e.action == GLFW_PRESS && e.key == GLFW_KEY_F6 && module) {
 				module->setExclusive(true);
 				e.consume(this);
 			}
@@ -1568,9 +1570,9 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			int lang = module ? module->layoutIdx : 1;
 			const char* l1;
 			const char* l2;
-			if (lang == 0)      { l1 = "Enter: aktivieren"; l2 = "ESC: deaktivieren"; }
-			else if (lang == 2) { l1 = "Enter: activar";    l2 = "ESC: desactivar"; }
-			else                { l1 = "Enter: enable";     l2 = "ESC: disable"; }
+			if (lang == 0)      { l1 = "F6: aktivieren"; l2 = "ESC: deaktivieren"; }
+			else if (lang == 2) { l1 = "F6: activar";    l2 = "ESC: desactivar"; }
+			else                { l1 = "F6: enable";     l2 = "ESC: disable"; }
 			nvgFontFaceId(args.vg, font->handle);
 			nvgFontSize(args.vg, 14);
 			nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
