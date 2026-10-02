@@ -9,7 +9,7 @@
   "sourceUrl": "https://github.com/SantiJay7/STJModules",
   "pluginUrl": "https://github.com/SantiJay7/STJModules",
   "manualUrl": "https://github.com/SantiJay7/STJModules",
-  "description": "STJ Modules: Balatube modal percussion (balafon bar ↔ PVC tube) and Wizar Matrix keyboard mapper (46 keys + spacebar)",
+  "description": "STJ Modules: Balatube modal percussion (balafon bar ↔ PVC tube) and Wizar Matrix keyboard mapper (46 assignable keys)",
   "modules": [
     {
       "slug": "Balatube",
@@ -24,7 +24,7 @@
     {
       "slug": "wizarkeyboard",
       "name": "Wizar Matrix",
-      "description": "Map computer keyboard keys to VCV Rack parameters. 46 assignable keys plus spacebar. Momentary/toggle buttons, fader/rotary with height and velocity control, and parameter mapping mode.",
+      "description": "Map computer keyboard keys to VCV Rack parameters. 46 assignable keys. Momentary/toggle buttons, fader/rotary with height and velocity control, and parameter mapping mode.",
       "tags": [
         "Controller",
         "Utility"

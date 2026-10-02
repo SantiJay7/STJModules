@@ -69,10 +69,20 @@ When **Modo CONTROL** is enabled (right-click menu, green LED on), Wizar Matrix
 takes over the computer keyboard so keypresses are sent to your mappings
 instead of Rack:
 
-- Plain keys are captured (they will not trigger Rack or other modules),
-  except **F1–F12** and **Space**, which always pass through.
+- Only the **46 assignable keys** are captured (the alphanumeric block
+  `1-0 - =` / `Q-P [ ]` / `A-\` / `Z-/`). They will not trigger Rack or
+  other modules.
+- Everything else always passes through to Rack, even with CONTROL ON:
+
+  - **Space**, **Enter**, **Tab**, backquote — browser, field focus, no Rack binding.
+
+  - **F1** manual, **F3** CPU meter, **F4** frame all modules, **F11**
+    fullscreen (these are Rack's own bindings).
+
+  - **Arrow keys** pan the rack; **Supr**/**Backspace** delete the selected
+    module. `Ctrl+Z` undoes the delete, cables included.
 - Combos with **Ctrl, Alt or Super** (e.g. `Ctrl+Z`, `Ctrl+S`) always reach
-  Rack, even with CONTROL ON — they never trigger notes.
+  Rack — they never trigger notes.
 - Typing in text fields (browser search, menus…) is never captured.
 - **Escape** releases CONTROL immediately (handy if you get stuck).
 - Only **one** Wizar Matrix instance may use CONTROL at a time (see §8).
