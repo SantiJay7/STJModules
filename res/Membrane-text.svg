@@ -131,8 +131,8 @@ m951 -169 c13 -16 12 -17 -3 -4 -17 13 -22 21 -14 21 2 0 10 -8 17 -17z m59
   <text x="65" y="40" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
   <text x="23.6" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">LEVEL</text>
   <text x="65" y="93" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">MATERIAL</text>
-  <text x="23.6" y="146" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">HARM</text>
-  <text x="65" y="150" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">EXCITER</text>
+  <text x="23.6" y="140.4" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">HARM</text>
+  <text x="65" y="140.4" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">EXCITER</text>
   <text x="23.6" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DRIVE</text>
   <text x="65" y="198" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">DECAY</text>
   <text x="23.6" y="239" text-anchor="middle" font-family="DejaVu Sans" font-size="6.5" fill="#bbbbbb">VEL</text>
