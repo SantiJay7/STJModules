@@ -1540,21 +1540,30 @@ struct WizarLogoWidget : widget::TransparentWidget {
 // Widget principal
 // ============================================================================
 
-	// Zona del LED de estado: tooltip + F6 para conmutar el modo exclusivo.
-	// Transparente al raton (no consume botones); solo escucha tecla en hover.
+	// F6 para conmutar el modo exclusivo + tooltip sobre el LED.
+	// Dos rectangulos independientes: `box` cubre TODO el panel para que F6
+	// funcione con el raton en cualquier punto del modulo, mientras el
+	// tooltip sigue ligado al rectangulo del LED (`tipBox`).
+	// Transparente al raton: no consume botones ni scroll, asi que los knobs
+	// que quedan debajo conservan su hover y sus tooltips (recursePositionEvent
+	// solo detiene el recorrido si el evento se consume).
 	struct ExclusiveHotzone : widget::TransparentWidget {
 		WizarKeyboardModule* module = NULL;
-		bool hovered = false;
-		math::Vec mousePos;
+		math::Rect tipBox;      // zona del LED: unica que muestra el tooltip
+		bool hovered = false;   // = raton dentro de tipBox
+		math::Vec mousePos;     // en coordenadas del panel
 		int64_t lastHoverMs = 0;
 		explicit ExclusiveHotzone(WizarKeyboardModule* m) : module(m) {
-			box.pos = math::Vec(8.f, 24.f);
-			box.size = math::Vec(29.f, 28.f);
+			tipBox.pos = math::Vec(8.f, 24.f);
+			tipBox.size = math::Vec(29.f, 28.f);
+			box.pos = math::Vec(0.f, 0.f);   // tamaño lo fija applyUnits()
 		}
 		void onHover(const HoverEvent& e) override {
-			hovered = true;
 			mousePos = e.pos;
 			lastHoverMs = nowMs();
+			// e.pos llega relativo a este widget, que ahora es el panel
+			// entero, asi que se prueba el rectangulo del LED sin mas.
+			hovered = tipBox.contains(e.pos);
 		}
 		void step() override {
 			// Sin eventos de hover en 1.2s -> ocultar (respaldo de onLeave).
@@ -1617,6 +1626,7 @@ struct WizarLogoWidget : widget::TransparentWidget {
 
 	struct WizarKeyboardWidget : ModuleWidget {
 		widget::TransformWidget* logoWidget = NULL;
+		ExclusiveHotzone* hotzone = NULL;
 		bool lastExclusive = false;
 		bool killFlag = false;
 
@@ -1675,7 +1685,9 @@ struct WizarLogoWidget : widget::TransparentWidget {
 		if (module) {
 			// Botón luminoso de modo control (estilo VocalLamma)
 			addChild(createLightCentered<SmallLight<GreenLight>>(Vec(22.5, 38), module, EXCLUSIVE_LIGHT));
-			addChild(new ExclusiveHotzone(dynamic_cast<WizarKeyboardModule*>(module)));
+			hotzone = new ExclusiveHotzone(dynamic_cast<WizarKeyboardModule*>(module));
+			hotzone->box.size = box.size;
+			addChild(hotzone);
 			// Agarre de expansión (invisible: se arrastra el borde derecho)
 			addChild(new DragGripWidget(module, this));
 			// Solo registramos en el registro global si el módulo está en el
@@ -1726,6 +1738,11 @@ struct WizarLogoWidget : widget::TransparentWidget {
 		bool col = m ? m->collapsed : false;
 		box.size.x = col ? COLLAPSED_W : units * UNIT_W;
 		box.size.y = PANEL_H;
+		// La hotzone cubre el panel entero para que F6 baste con tener el
+		// raton encima del modulo (si se queda con el ancho de 1 unidad,
+		// las unidades extra quedan sin zona de activacion).
+		if (hotzone)
+			hotzone->box.size = box.size;
 	}
 
 	/** Pinta fondo, marco y relleno de TODAS las teclas (una sola fuente de

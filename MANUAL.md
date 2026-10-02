@@ -28,7 +28,8 @@ The module is **not** in the VCV Library yet; it is shared as a development buil
 - **CONTROL LED** (top‑left, green light): shows exclusive keyboard mode.
   Hover the LED area for a hint (in the keyboard layout language).
   Enable the mode from the module context menu (**Modo CONTROL**) or by
-  pressing **F6** while hovering the LED area; leave it with **Escape**
+  pressing **F6** while the mouse is anywhere over the module; leave it
+  with **Escape**
   or from the menu. The mode is UI state, so switching it never touches
   Rack's undo/redo history.
 - **Keys**: a grid of assignable keys (up to 46 across up to 3 units).
