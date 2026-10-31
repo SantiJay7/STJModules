@@ -139,7 +139,25 @@ struct Membrane : Module {
 			}
 		}
 
-		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f, float excite = 1.f) {
+		// Anti-alias: los modos altos pueden superar Nyquist (ratios hasta 29x).
+		// Fade suave entre 0.42 y 0.5 del sample rate.
+		static inline float nyqGain(float f, float sampleRate) {
+			const float nyq = 0.5f * sampleRate;
+			const float start = 0.84f * nyq; // 0.42 * sampleRate
+			if (f <= start) return 1.f;
+			if (f >= nyq) return 0.f;
+			float t = (f - start) / (nyq - start);
+			return 1.f - t * t * (3.f - 2.f * t);
+		}
+
+		// La velocidad no solo cambia el nivel: un golpe suave oscurece los
+		// modos altos y un golpe fuerte los deja brillar.
+		static inline float velTilt(float vel, int i) {
+			float modeTilt = (float)i / (float)(NUM_MODES - 1); // 0 en el modo 0, 1 en el 7
+			return 1.f - (1.f - vel) * 0.62f * modeTilt;
+		}
+
+		void process(float freq, float baseT60, float sampleRate, float material, float &outL, float &outR, float decayMul = 1.f, float drive = 0.5f, float excite = 1.f, float vel = 1.f) {
 			samplesSinceTrig++;
 			// Cantidades de zona 0..1 (una sola vez por muestra)
 			float djA = 1.f - fabsf(material - 0.5f) * 2.f; if (djA < 0.f) djA = 0.f;
@@ -221,10 +239,12 @@ struct Membrane : Module {
 						ringW  = 0.40f - djA * 0.25f;
 						if (i > 0) ringW *= (1.f - djA * 0.87f);
 					}
-					float w = 2.f * M_PI * freq * ratio * pitchMulEff / sampleRate;
+					float modeFreq = freq * ratio * pitchMulEff;
+					float w = 2.f * M_PI * modeFreq / sampleRate;
 					phaseA[i] += w;
 					if (phaseA[i] > 6.2831853f) phaseA[i] -= 6.2831853f;
-					y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW) * sinf(phaseA[i]);
+					y = (envA[i] * punchW * (0.25f + 0.75f * excite) + envR[i] * atkR * ringW)
+					    * sinf(phaseA[i]) * velTilt(vel, i) * nyqGain(modeFreq, sampleRate);
 				}
 
 				modeSum += gain;
@@ -249,13 +269,15 @@ struct Membrane : Module {
 				tableVals(material, i, ratio, gain, decay);
 
 				// La simpática resuena larga en medios; el modo0 corto para no embarrar ≤100Hz
-				float w = 2.f * M_PI * freq * ratio * 1.000f * pitchMul / sampleRate;
+				float symFreq = freq * ratio * pitchMul;
+				float w = 2.f * M_PI * symFreq / sampleRate;
 
 				envB[i] *= symR[i];
 				if (envB[i] < 1e-6f) envB[i] = 0.f;
 				phaseB[i] += w;
 				if (phaseB[i] > 6.2831853f) phaseB[i] -= 6.2831853f;
-				if (symGain > 0.f && envB[i] > 0.f) outSym += envB[i] * sinf(phaseB[i]) * gain;
+				if (symGain > 0.f && envB[i] > 0.f)
+					outSym += envB[i] * sinf(phaseB[i]) * gain * nyqGain(symFreq, sampleRate);
 			}
 
 			if (modeSum > 0.f) outSym /= modeSum;
@@ -295,11 +317,14 @@ struct Membrane : Module {
 					static const float slapGain[7] = {0.20f, 0.16f, 0.22f, 0.18f, 0.22f, 0.22f, 0.16f};
 					slapEnv *= slapRc;
 					for (int k = 0; k < 7; k++) {
-						slapPh[k] += 2.f * 3.14159265f * freq * slapRatio[k] * pitchMulEff / sampleRate;
+						float slapFreq = freq * slapRatio[k] * pitchMulEff;
+						slapPh[k] += 2.f * 3.14159265f * slapFreq / sampleRate;
 						if (slapPh[k] > 6.2831853f) slapPh[k] -= 6.2831853f;
-						slapOut += sinf(slapPh[k]) * slapGain[k];
+						slapOut += sinf(slapPh[k]) * slapGain[k] * nyqGain(slapFreq, sampleRate);
 					}
-					slapOut *= slapEnv * djA;
+					// La velocidad también pesa en la palma: un golpe suave
+					// conserva el slap, pero menos.
+					slapOut *= slapEnv * djA * (0.55f + 0.45f * vel);
 				}
 			}
 
@@ -309,7 +334,10 @@ struct Membrane : Module {
 			float clickGain = 0.020f * (1.f - djA * 0.80f);
 			// Darbuka al tope: sin ruido (el ataque lo da el parcial tonal 705Hz)
 			clickGain *= (1.f - darbukaB);
-			float out = click * clickGain * excite + outMode * 0.70f + outSym * 0.15f * (1.f - djA * 0.5f) + subOut * 0.09f * taikoA + sub2Out * 0.06f * taikoA + slapOut * 0.22f * excite;
+			// El click sigue a la velocidad aunque el EXCITER esté fijo:
+			// golpe fuerte = más transitorio, golpe suave = más cuerpo.
+			float velClick = 0.35f + 0.65f * vel;
+			float out = click * clickGain * excite * velClick + outMode * 0.70f + outSym * 0.15f * (1.f - djA * 0.5f) + subOut * 0.09f * taikoA + sub2Out * 0.06f * taikoA + slapOut * 0.22f * excite;
 			// Imagen estéreo: membranas opuestas; (L+R)/2 = mezcla mono
 			float diff = (outMode * 0.70f - outSym * 0.15f) * 0.25f;
 			outL = out + diff;
@@ -362,6 +390,7 @@ struct Membrane : Module {
 	int vChan[3] = {0, 0, 0}; // voz -> canal de entrada
 	float chFreq[3] = {0.f, 0.f, 0.f}, chLevel[3] = {0.f, 0.f, 0.f}, chMat[3] = {0.f, 0.f, 0.f};
 	float chT60[3] = {0.f, 0.f, 0.f}, chHarm[3] = {0.f, 0.f, 0.f}, chExc[3] = {0.f, 0.f, 0.f}, chDarbT[3] = {0.f, 0.f, 0.f};
+	float chVel[3] = {1.f, 1.f, 1.f};
 	int lastVoice = 0;
 	int trigCount = 0;
 	dsp::SchmittTrigger trig[3];
@@ -458,7 +487,7 @@ struct Membrane : Module {
 			if (matGain < 1.f) matGain = 1.f;
 			level *= matGain;
 			chFreq[c] = freq; chLevel[c] = level; chMat[c] = material;
-			chT60[c] = baseT60; chHarm[c] = harm; chExc[c] = exc; chDarbT[c] = darbukaTime;
+			chT60[c] = baseT60; chHarm[c] = harm; chExc[c] = exc; chDarbT[c] = darbukaTime; chVel[c] = vel;
 			if (doTrig) {
 				int v = (lastVoice + 1) % 3;
 				int burst = std::max(1, (int)(0.012f * args.sampleRate)); // 12ms click
@@ -474,7 +503,7 @@ struct Membrane : Module {
 			int c = vChan[v];
 			if (c >= maxChan) c = maxChan - 1;
 			float vL = 0.f, vR = 0.f;
-			voices[v].process(chFreq[c], chT60[c], args.sampleRate, chMat[c], vL, vR, chDarbT[c], chHarm[c], chExc[c]);
+			voices[v].process(chFreq[c], chT60[c], args.sampleRate, chMat[c], vL, vR, chDarbT[c], chHarm[c], chExc[c], chVel[c]);
 			outMixL += vL * chLevel[c];
 			outMixR += vR * chLevel[c];
 		}
