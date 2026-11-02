@@ -4,6 +4,7 @@
 #include <ui/TextField.hpp>
 #include <thread>
 #include <osdialog.h>
+#include <system.hpp>
 
 #include <cmath>
 #include <chrono>
@@ -78,19 +79,25 @@ static const char* LAYOUT_NAMES[3] = {"Deutsch QWERTZ", "English", "Espa\xC3\xB1
 /** Carga la primera fuente disponible. loadFont() puede LANZAR si el archivo
     falta o es invalido, asi que se protege con try/catch y se memoiza. */
 static std::shared_ptr<window::Font> loadUiFont() {
+	if (!APP || !APP->window)
+		return NULL;
 	static std::shared_ptr<window::Font> cached;
 	static bool tried = false;
 	if (!tried) {
 		tried = true;
 		static const char* candidates[] = {
-			"res/fonts/DejaVuSans-Bold.ttf",
 			"res/fonts/Nunito-Bold.ttf",
 			"res/fonts/DejaVuSans.ttf",
 			"res/fonts/ShareTechMono-Regular.ttf",
 		};
 		for (const char* path : candidates) {
+			std::string filename = asset::system(path);
+			// No llamar a loadFont() con un archivo ausente: Rack lo registra
+			// como warning aunque el fallback funcione.
+			if (!system::isFile(filename))
+				continue;
 			try {
-				auto f = APP->window->loadFont(asset::system(path));
+				auto f = APP->window->loadFont(filename);
 				if (f && f->handle >= 0) {
 					cached = f;
 					break;
@@ -99,6 +106,9 @@ static std::shared_ptr<window::Font> loadUiFont() {
 				// Fuente no disponible: probar la siguiente
 			}
 		}
+		// Ultimo recurso: la fuente de la UI de Rack, que ya esta cargada.
+		if (!cached)
+			cached = APP->window->uiFont;
 	}
 	return cached;
 }
