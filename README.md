@@ -1,6 +1,6 @@
-# STJ Modules
+# STJ
 
-Collection of modules for VCV Rack 2 by STJ Modules (Santi Jay) — https://github.com/SantiJay7
+Collection of modules for VCV Rack 2 by STJ (Santi Jay) — https://github.com/SantiJay7
 
 ## Modules
 
@@ -18,7 +18,7 @@ make -j$(nproc)
 
 ## Install
 
-Copy `plugin.so`, `plugin.json`, `res/` to `~/.local/share/Rack2/plugins-lin-x64/STJModules/`
+Copy `plugin.so`, `plugin.json`, `res/` to `~/.local/share/Rack2/plugins-lin-x64/STJ/`
 
 ## License
 
