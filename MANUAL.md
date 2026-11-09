@@ -5,7 +5,7 @@ module parameters. One key can drive a button (momentary or toggle) or a
 fader/knob (with adjustable height and velocity), and a single key can even
 control **several controls at once** with the same settings.
 
-> Brand: STJ Modules · License: GPL‑3.0‑or‑later
+> Brand: STJ · License: GPL‑3.0‑or‑later
 
 ---
 
@@ -17,7 +17,7 @@ control **several controls at once** with the same settings.
    - Linux: `~/.local/share/Rack2/plugins-lin-x64/`
    - macOS: `Documents/Rack2/plugins/`
    - Windows: `Documents/Rack2/plugins/`
-3. Start VCV Rack. "Wizar Matrix" appears under the "STJ Modules" brand.
+3. Start VCV Rack. "Wizar Matrix" appears under the "STJ" brand.
 
 The module is **not** in the VCV Library yet; it is shared as a development build.
 

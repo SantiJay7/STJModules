@@ -1976,10 +1976,11 @@ struct WizarLogoWidget : widget::TransparentWidget {
 	}
 
 	std::string presetDir() {
-		// Presets de usuario: carpeta escribible y estable entre cambios de slug.
-		// Antes usaba asset::plugin (carpeta del plugin, distinta para wizarkeyboard vs STJModules),
-		// por eso un preset guardado con el plugin viejo no aparecía al cargar con el nuevo.
-		std::string dir = asset::user("presets/STJModules/Wizar");
+		// Presets de usuario: carpeta escribible y estable entre cambios de version.
+		// Antes usaba asset::plugin (carpeta del plugin, distinta para wizarkeyboard
+		// vs el plugin), por eso un preset guardado con el plugin viejo no aparecia
+		// al cargar con el nuevo.
+		std::string dir = asset::user("presets/STJ/Wizar");
 		system::createDirectory(dir);
 		return dir;
 	}
