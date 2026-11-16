@@ -214,6 +214,10 @@ struct Balatube : Module {
 			float delayCenter = (minDelay + maxDelay) * 0.5f;
 			float delayRange = (maxDelay - minDelay) * 0.5f;
 			float delaySamples = delayCenter + lfo * depth * delayRange;
+			// Keep the read index inside the buffer at any sample rate. At
+			// 192 kHz, 12 ms is 2304 samples, which exceeds DELAY_BUF_SIZE
+			// and would read before buf[0].
+			delaySamples = std::max(1.f, std::min(delaySamples, (float)(DELAY_BUF_SIZE - 2)));
 
 			// Write to buffer. The feedback path is soft-saturated (tanh)
 			// instead of a bare multiply: this lets Feedback be pushed much
@@ -438,8 +442,14 @@ struct Balatube : Module {
 		float out[16] = {};
 
 		for (int p = 0; p < poly; p++) {
-			int trigIdx = std::min(p, inputs[TRIG_INPUT].getChannels() - 1);
-			int voctIdx = std::min(p, inputs[VOCT_INPUT].getChannels() - 1);
+			// getChannels() is 0 when the input is disconnected. Clamp to 0
+			// before calling getVoltage(): passing -1 would wrap to 255
+			// (uint8_t) and read far outside the port's 16-channel array.
+			// That random value could keep the Schmitt trigger high every
+			// sample and reset the flanger's 2048-sample buffer on every
+			// sample, pegging all CPU cores when Rack closes.
+			int trigIdx = std::min(p, std::max(0, (int) inputs[TRIG_INPUT].getChannels() - 1));
+			int voctIdx = std::min(p, std::max(0, (int) inputs[VOCT_INPUT].getChannels() - 1));
 
 			float trigVal = inputs[TRIG_INPUT].getVoltage(trigIdx);
 			float voct = inputs[VOCT_INPUT].isConnected() ?
