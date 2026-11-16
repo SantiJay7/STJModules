@@ -850,7 +850,6 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 		LearnOverlay(WizarKeyboardModule* module, int slot) {
 			this->module = module;
 			this->slot = slot;
-			DEBUG("Wizar: overlay MAP abierto para slot %d", slot);
 			box.pos = math::Vec(0, 0);
 			box.size = APP->scene->box.size;
 			module->pendingMapSlot = slot;
@@ -862,7 +861,6 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 	}
 
 	void finish() {
-		DEBUG("Wizar: overlay cerrado");
 		requestDelete();
 	}
 
@@ -933,7 +931,6 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 	}
 
 	void onButton(const ButtonEvent& e) override {
-		DEBUG("Wizar: overlay click btn=%d act=%d pos=(%.0f,%.0f)", e.button, e.action, e.pos.x, e.pos.y);
 		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_RIGHT) {
 			e.consume(this);
 			finish();
@@ -971,11 +968,8 @@ static std::string wizarOverlayReject(int layout, const std::string& label) {
 				paramId = -1;
 				targetMod = NULL;
 				ok = paramAt(p2, &moduleId, &paramId, &targetMod);
-				if (ok)
-					DEBUG("Wizar: encontrado via p2 (conversion manual)");
 			}
 			if (!ok) {
-				DEBUG("Wizar: ningun parametro ni en p1 ni en p2");
 				return;
 			}
 			int ownerSlot = -1;
