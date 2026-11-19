@@ -107,7 +107,7 @@ undoes your real edits.
 ## 6. Morse mode
 
 In a Fader/Knob key's menu, enable **Morse** (`~` mark in the submenu).
-Short press = +1%, long press = −1%, with a global short/long threshold
+Short press = +1%, long press = −2%, with a global short/long threshold
 (adjustable in the module menu, 50–1500 ms). Height/Velocity sliders are
 disabled in Morse mode.
 
