@@ -677,7 +677,10 @@ static void wizarKeyCallback(GLFWwindow* win, int key, int scancode, int action,
 
 static void wizarCharCallback(GLFWwindow* win, unsigned int codepoint) {
 	WizarKeyboardModule* m = g_hookModule;
-	if (m && m->isExclusive())
+	// Fail-open: si hay un campo de texto enfocado, los caracteres deben
+	// llegar a Rack aunque CONTROL este activo. El callback de teclas ya
+	// lo hace; sin esto el campo recibe el foco pero no las letras.
+	if (m && m->isExclusive() && !wizarTextFocused())
 		return;
 	if (g_prevCharCb)
 		g_prevCharCb(win, codepoint);
