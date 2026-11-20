@@ -580,6 +580,9 @@ static void copyKeySettings(const KeyConfig& k) {
 	g_keyClip.hMax = k.hMax;
 	g_keyClip.velTime = k.velTime;
 	g_keyClip.morse = k.morse;
+	g_keyClip.random = k.random;
+	g_keyClip.randMin = k.randMin;
+	g_keyClip.randMax = k.randMax;
 	g_hasClip = true;
 }
 static void pasteKeySettings(KeyConfig& k) {
@@ -593,6 +596,12 @@ static void pasteKeySettings(KeyConfig& k) {
 	k.hMax = std::max(k.hMin, k.hMax);
 	k.velTime = g_keyClip.velTime;
 	k.morse = g_keyClip.morse;
+	k.random = g_keyClip.random;
+	k.randMin = g_keyClip.randMin;
+	k.randMax = g_keyClip.randMax;
+	k.randMin = std::max(0.f, std::min(k.randMin, k.randMax)); // Random: mínimo nunca baja de 0%
+	k.randMax = std::max(k.randMin, k.randMax);
+	k.faderActive = false; // al pegar se detienen las ramps actuales
 }
 
 // ============================================================================
@@ -1193,14 +1202,14 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 
 		if (pressed && !learning) {
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, box.pos.x, box.pos.y, box.size.x, box.size.y, 3);
+			nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3);
 			nvgFillColor(args.vg, nvgRGBA(255, 255, 255, 60));
 			nvgFill(args.vg);
 		}
 
 		if (learning && blinkPhase()) {
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, box.pos.x, box.pos.y, box.size.x, box.size.y, 3);
+			nvgRoundedRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, 3);
 			nvgFillColor(args.vg, nvgRGBA(255, 220, 60, 100));
 			nvgFill(args.vg);
 			nvgStrokeColor(args.vg, nvgRGB(0xff, 0xdc, 0x3c));
@@ -1245,7 +1254,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 
 	void createContextMenu() {
 		ui::Menu* menu = createMenu();
-		const KeyConfig& k = module->keys[slot];
+		KeyConfig& k = module->keys[slot];
 		std::string label = module->keyLabel(slot);
 
 		menu->addChild(createMenuLabel(std::string("Tecla [") + label + "]"));
@@ -1324,24 +1333,6 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				m->addChild(createMenuLabel("Pasos +1%/-2%: corto sube, largo baja"));
 			if (k.random)
 				m->addChild(createMenuLabel("Random: valor al azar por pulsación"));
-			ui::Slider* sHmax = new ui::Slider;
-			FloatQuantity* qHmax = new FloatQuantity(&k.hMax, "Height m\xC3\xA1ximo", true, false);
-			qHmax->other = &k.hMin;
-			qHmax->onChange = [&k]() { k.isFader = true; };
-			qHmax->disabled = k.morse || k.random;
-			sHmax->quantity = qHmax;
-			sHmax->box.size.x = 160.f;
-			m->addChild(sHmax);
-			ui::Slider* sHmin = new ui::Slider;
-			FloatQuantity* qHmin = new FloatQuantity(&k.hMin, "Height m\xC3\xADnimo", true, false);
-			qHmin->other = &k.hMax;
-			qHmin->isMinBound = true;
-			qHmin->floorV = 0.f; // El mínimo nunca baja de 0% (evita faders lentos)
-			qHmin->onChange = [&k]() { k.isFader = true; };
-			qHmin->disabled = k.morse || k.random;
-			sHmin->quantity = qHmin;
-			sHmin->box.size.x = 160.f;
-			m->addChild(sHmin);
 		ui::Slider* sVel = new ui::Slider;
 		FloatQuantity* qVel = new FloatQuantity(&k.velTime, "Velocity", false, true);
 		qVel->minV = 0.f; // 0 = instantáneo
@@ -1351,26 +1342,6 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 			sVel->quantity = qVel;
 			sVel->box.size.x = 160.f;
 			m->addChild(sVel);
-			// Rango del modo Random (deshabilitado si no es Random)
-			ui::Slider* sRmin = new ui::Slider;
-			FloatQuantity* qRmin = new FloatQuantity(&k.randMin, "Random m\xC3\xADn", true, false);
-			qRmin->other = &k.randMax;
-			qRmin->isMinBound = true;
-			qRmin->floorV = 0.f;
-			qRmin->onChange = [&k]() { k.random = true; };
-			qRmin->disabled = !k.random;
-			sRmin->quantity = qRmin;
-			sRmin->box.size.x = 160.f;
-			m->addChild(sRmin);
-			ui::Slider* sRmax = new ui::Slider;
-			FloatQuantity* qRmax = new FloatQuantity(&k.randMax, "Random m\xC3\xA1x", true, false);
-			qRmax->other = &k.randMin;
-			qRmax->floorV = 0.f;
-			qRmax->onChange = [&k]() { k.random = true; };
-			qRmax->disabled = !k.random;
-			sRmax->quantity = qRmax;
-			sRmax->box.size.x = 160.f;
-			m->addChild(sRmax);
 			m->addChild(new ui::MenuSeparator);
 			m->addChild(createMenuItem("Map...", "", [this]() {
 				module->keys[slot].isFader = true;
@@ -1400,6 +1371,26 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 				}
 			}
 		}, module->pendingMapSlot == slot));
+
+		// Height min/max en el menú principal de la tecla (no en el submenú Fader/Knob).
+		ui::Slider* sHmax = new ui::Slider;
+		FloatQuantity* qHmax = new FloatQuantity(&k.hMax, "Height máximo", true, false);
+		qHmax->other = &k.hMin;
+		qHmax->onChange = [this]() { KeyConfig& k = module->keys[slot]; k.isFader = true; };
+		qHmax->disabled = !k.isFader;
+		sHmax->quantity = qHmax;
+		sHmax->box.size.x = 160.f;
+		menu->addChild(sHmax);
+		ui::Slider* sHmin = new ui::Slider;
+		FloatQuantity* qHmin = new FloatQuantity(&k.hMin, "Height mínimo", true, false);
+		qHmin->other = &k.hMax;
+		qHmin->isMinBound = true;
+		qHmin->floorV = 0.f; // El mínimo nunca baja de 0% (evita faders lentos)
+		qHmin->onChange = [this]() { KeyConfig& k = module->keys[slot]; k.isFader = true; };
+		qHmin->disabled = !k.isFader;
+		sHmin->quantity = qHmin;
+		sHmin->box.size.x = 160.f;
+		menu->addChild(sHmin);
 
 		menu->addChild(new ui::MenuSeparator);
 		menu->addChild(createMenuItem("Copy settings", "", [this]() {
