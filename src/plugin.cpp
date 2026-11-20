@@ -278,8 +278,7 @@ struct WizarKeyboardModule : Module {
 
 	void applyValue(int slot, float normIn) {
 		KeyConfig& k = keys[slot];
-		float lo = k.morse ? k.hMin : (k.random ? k.randMin : k.hMin);
-		float hi = k.morse ? k.hMax : (k.random ? k.randMax : k.hMax);
+		float lo = k.hMin, hi = k.hMax;
 		float norm = clamp(normIn, lo, hi);
 		k.value = norm;
 		for (KeyConfig::Target& t : k.targets) {
@@ -304,8 +303,8 @@ struct WizarKeyboardModule : Module {
 			// Modo Morse: registra el instante; el paso se decide al soltar
 			k.pressMs = nowMs();
 		} else if (k.random) {
-			// Modo Random: valor aleatorio dentro de [randMin,randMax] por pulsación
-			float lo = k.randMin, hi = k.randMax;
+			// Modo Random: valor aleatorio en Height (hMin-hMax) por pulsación
+			float lo = k.hMin, hi = k.hMax;
 			if (hi < lo)
 				std::swap(hi, lo);
 			applyValue(slot, lo + (hi - lo) * wizarRand01());
@@ -447,8 +446,6 @@ struct WizarKeyboardModule : Module {
 			json_object_set_new(kJ, "velTime", json_real(k.velTime));
 			json_object_set_new(kJ, "morse", json_boolean(k.morse));
 			json_object_set_new(kJ, "random", json_boolean(k.random));
-			json_object_set_new(kJ, "randMin", json_real(k.randMin));
-			json_object_set_new(kJ, "randMax", json_real(k.randMax));
 			json_array_append_new(keysJ, kJ);
 		}
 		json_object_set_new(rootJ, "keys", keysJ);
@@ -527,10 +524,9 @@ struct WizarKeyboardModule : Module {
 			k.velTime = clamp((float) json_real_value(json_object_get(kJ, "velTime")), 0.f, 60.f);
 			k.morse = json_boolean_value(json_object_get(kJ, "morse"));
 			k.random = json_boolean_value(json_object_get(kJ, "random"));
-			json_t* rminJ = json_object_get(kJ, "randMin");
-			json_t* rmaxJ = json_object_get(kJ, "randMax");
-			k.randMin = rminJ ? clamp((float) json_real_value(rminJ), 0.f, 1.f) : k.hMin;
-			k.randMax = rmaxJ ? clamp((float) json_real_value(rmaxJ), 0.f, 1.f) : k.hMax;
+			// Random: ya no existen randMin/randMax; usamos Height.
+			k.randMin = k.hMin;
+			k.randMax = k.hMax;
 			k.value = k.hMin;
 			k.pressed = false;
 			for (KeyConfig::Target& t : k.targets)
@@ -574,33 +570,19 @@ static KeyConfig g_keyClip;
 static bool g_hasClip = false;
 static void copyKeySettings(const KeyConfig& k) {
 	g_keyClip = KeyConfig();
-	g_keyClip.isFader = k.isFader;
-	g_keyClip.toggle = k.toggle;
 	g_keyClip.hMin = k.hMin;
 	g_keyClip.hMax = k.hMax;
 	g_keyClip.velTime = k.velTime;
-	g_keyClip.morse = k.morse;
-	g_keyClip.random = k.random;
-	g_keyClip.randMin = k.randMin;
-	g_keyClip.randMax = k.randMax;
 	g_hasClip = true;
 }
 static void pasteKeySettings(KeyConfig& k) {
 	if (!g_hasClip)
 		return;
-	k.isFader = g_keyClip.isFader;
-	k.toggle = g_keyClip.toggle;
 	k.hMin = g_keyClip.hMin;
 	k.hMax = g_keyClip.hMax;
 	k.hMin = std::max(0.f, std::min(k.hMin, k.hMax)); // suelo 0%
 	k.hMax = std::max(k.hMin, k.hMax);
 	k.velTime = g_keyClip.velTime;
-	k.morse = g_keyClip.morse;
-	k.random = g_keyClip.random;
-	k.randMin = g_keyClip.randMin;
-	k.randMax = g_keyClip.randMax;
-	k.randMin = std::max(0.f, std::min(k.randMin, k.randMax)); // Random: mínimo nunca baja de 0%
-	k.randMax = std::max(k.randMin, k.randMax);
 	k.faderActive = false; // al pegar se detienen las ramps actuales
 }
 
