@@ -278,8 +278,8 @@ struct WizarKeyboardModule : Module {
 
 	void applyValue(int slot, float normIn) {
 		KeyConfig& k = keys[slot];
-		float lo = k.morse ? 0.f : (k.random ? k.randMin : k.hMin);
-		float hi = k.morse ? 1.f : (k.random ? k.randMax : k.hMax);
+		float lo = k.morse ? k.hMin : (k.random ? k.randMin : k.hMin);
+		float hi = k.morse ? k.hMax : (k.random ? k.randMax : k.hMax);
 		float norm = clamp(normIn, lo, hi);
 		k.value = norm;
 		for (KeyConfig::Target& t : k.targets) {
