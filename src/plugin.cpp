@@ -698,7 +698,11 @@ static void hookInstall(WizarKeyboardModule* m) {
 }
 
 static void hookRemove(const WizarKeyboardModule* m) {
-	if (g_hookModule != m)
+	// Sin módulo (preview del navegador) no hay gancho que retirar. Si no
+	// comprobamos `!m`, un preview destruido con g_hookModule == NULL entra
+	// aquí y desregistra los callbacks de teclado de Rack (g_prev* son NULL),
+	// rompiendo la escritura en cualquier navegador de módulos hasta reiniciar.
+	if (!m || g_hookModule != m)
 		return;
 	GLFWwindow* win = (APP && APP->window) ? APP->window->win : NULL;
 	if (win) {
@@ -1701,22 +1705,24 @@ struct WizarLogoWidget : widget::TransparentWidget {
 			// motor (el módulo temporal del preview NO debe registrarse).
 			if (APP && APP->engine && APP->engine->getModule(module->id))
 				g_modules.push_back(module);
+			// Capa de badges: solo con módulo real. Los previews del navegador
+			// no deben crear/retirar widgets globales del rack.
+			if (!g_badges) {
+				g_badges = new BadgeOverlay();
+				APP->scene->rack->addChild(g_badges);
+			}
 		}
 		// En el preview del navegador no hay modulo, asi que no se crea el
 		// conmutador CONTROL decorativo (el modo exclusivo vive en el menu).
-
-	
-	// Capa de badges
-		if (!g_badges) {
-			g_badges = new BadgeOverlay();
-			APP->scene->rack->addChild(g_badges);
-		}
 
 		applyUnits();
 	}
 
 		~WizarKeyboardWidget() {
 			WizarKeyboardModule* m = getWizarModule();
+			// Preview del navegador: no tocar gancho, registro global ni badges.
+			if (!m)
+				return;
 			hookRemove(m);
 			g_modules.erase(std::remove(g_modules.begin(), g_modules.end(), m), g_modules.end());
 			if (g_modules.empty() && g_badges) {
