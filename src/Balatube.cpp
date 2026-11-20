@@ -340,7 +340,7 @@ struct Balatube : Module {
 		configParam(DEPTH_PARAM, 0.f, 1.f, 0.4f, "Depth");
 		configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.5f, "Feedback");
 		configParam(COLOR_PARAM, 0.f, 1.f, 0.5f, "Color");
-		configParam(MIX_PARAM, 0.f, 1.f, 0.5f, "Mix");
+		configParam(MIX_PARAM, 0.f, 1.f, 0.0f, "Mix");
 		configParam(MATERIAL_PARAM, 0.f, 1.f, 0.f, "Material (Wood -> PVC)");
 		configParam(DRIVE_PARAM, 0.f, 1.f, 0.3f, "Drive");
 		configParam(OD_MIX_PARAM, 0.f, 1.f, 0.f, "Overdrive Mix");

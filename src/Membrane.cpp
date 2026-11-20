@@ -287,7 +287,6 @@ struct Membrane : Module {
 			outSym *= symRamp;
 			// Parche lejano oído a través de la caja: pasa-bajos ~500Hz
 			symLp += symCc * (outSym - symLp);
-			symLp += symCc * (outSym - symLp);
 			outSym = symLp;
 			if (fabsf(symLp) < 1e-15f) symLp = 0.f;
 
