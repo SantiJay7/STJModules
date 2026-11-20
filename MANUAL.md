@@ -87,6 +87,7 @@ instead of Rack:
 - Typing in text fields (browser search, menus…) is never captured.
 - **Escape** releases CONTROL immediately (handy if you get stuck).
 - Only **one** Wizar Matrix instance may use CONTROL at a time (see §8).
+- In VST/AU, Wizar receives keys only while the plugin window has keyboard focus; focus the plugin window to enable CONTROL capture.
 
 Toggling the mode never touches Rack's undo/redo history, so `Ctrl+Z` always
 undoes your real edits.
