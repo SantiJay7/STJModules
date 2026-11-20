@@ -1377,7 +1377,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 		FloatQuantity* qHmax = new FloatQuantity(&k.hMax, "Height máximo", true, false);
 		qHmax->other = &k.hMin;
 		qHmax->onChange = [this]() { KeyConfig& k = module->keys[slot]; k.isFader = true; };
-		qHmax->disabled = !k.isFader;
+		qHmax->disabled = false;
 		sHmax->quantity = qHmax;
 		sHmax->box.size.x = 160.f;
 		menu->addChild(sHmax);
@@ -1387,7 +1387,7 @@ static bool wizarInEngine(WizarKeyboardModule* m) {
 		qHmin->isMinBound = true;
 		qHmin->floorV = 0.f; // El mínimo nunca baja de 0% (evita faders lentos)
 		qHmin->onChange = [this]() { KeyConfig& k = module->keys[slot]; k.isFader = true; };
-		qHmin->disabled = !k.isFader;
+		qHmin->disabled = false;
 		sHmin->quantity = qHmin;
 		sHmin->box.size.x = 160.f;
 		menu->addChild(sHmin);
