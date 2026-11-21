@@ -385,14 +385,14 @@ struct Membrane : Module {
 		}
 	};
 
-	DrumVoice voices[3];
-	int vChan[3] = {0, 0, 0}; // voz -> canal de entrada
-	float chFreq[3] = {0.f, 0.f, 0.f}, chLevel[3] = {0.f, 0.f, 0.f}, chMat[3] = {0.f, 0.f, 0.f};
-	float chT60[3] = {0.f, 0.f, 0.f}, chHarm[3] = {0.f, 0.f, 0.f}, chExc[3] = {0.f, 0.f, 0.f}, chDarbT[3] = {0.f, 0.f, 0.f};
-	float chVel[3] = {1.f, 1.f, 1.f};
+	DrumVoice voices[4];
+	int vChan[4] = {0, 0, 0, 0}; // voz -> canal de entrada
+	float chFreq[4] = {0.f, 0.f, 0.f, 0.f}, chLevel[4] = {0.f, 0.f, 0.f, 0.f}, chMat[4] = {0.f, 0.f, 0.f, 0.f};
+	float chT60[4] = {0.f, 0.f, 0.f, 0.f}, chHarm[4] = {0.f, 0.f, 0.f, 0.f}, chExc[4] = {0.f, 0.f, 0.f, 0.f}, chDarbT[4] = {0.f, 0.f, 0.f, 0.f};
+	float chVel[4] = {1.f, 1.f, 1.f, 1.f};
 	int lastVoice = 0;
 	int trigCount = 0;
-	dsp::SchmittTrigger trig[3];
+	dsp::SchmittTrigger trig[4];
 	float limEnvG = 0.f;
 	float limSr = -1.f, limAtkC = 0.f, limRelC = 0.f;
 
@@ -463,7 +463,7 @@ struct Membrane : Module {
 		float outMixR = 0.f;
 		int maxChan = 1;
 		for (int id : {TRIG_INPUT, VOCT_INPUT, VELOCITY_INPUT}) maxChan = std::max(maxChan, inputs[id].getChannels());
-		if (maxChan > 3) maxChan = 3;
+		if (maxChan > 4) maxChan = 4;
 		// Fase 1: entradas por canal (trigger + parametros; cada canal recuerda los suyos).
 		for (int c = 0; c < maxChan; c++) {
 			float trigVal = inputs[TRIG_INPUT].getPolyVoltage(c);
@@ -484,11 +484,14 @@ struct Membrane : Module {
 			float level = params[LEVEL_PARAM].getValue() * vel;
 			float matGain = 1.f + 10.0f * (1.f - fabsf(material - 0.5f) * 2.f) + 6.0f * fmaxf(0.f, (material - 0.5f) * 2.f) + 7.00f * (1.f - clamp(material / 0.35f, 0.f, 1.f));
 			if (matGain < 1.f) matGain = 1.f;
+			if (material < 0.05f) matGain *= 1.5849f; // +4 dB: Material 0
+			else if (fabsf(material - 0.5f) <= 0.01f) matGain *= 0.7079f; // -3 dB: Material 0.5
+			else if (material >= 0.95f) matGain *= 1.4142f; // +3 dB: Material 1
 			level *= matGain;
 			chFreq[c] = freq; chLevel[c] = level; chMat[c] = material;
 			chT60[c] = baseT60; chHarm[c] = harm; chExc[c] = exc; chDarbT[c] = darbukaTime; chVel[c] = vel;
 			if (doTrig) {
-				int v = (lastVoice + 1) % 3;
+				int v = (lastVoice + 1) % 4;
 				int burst = std::max(1, (int)(0.012f * args.sampleRate)); // 12ms click
 				voices[v].rng ^= (uint32_t)(trigCount * 2654435761u + 97u);
 				trigCount++;
@@ -498,7 +501,7 @@ struct Membrane : Module {
 		}
 		}
 		// Fase 2: cada voz suena con los parametros de SU canal (acorde real).
-		for (int v = 0; v < 3; v++) {
+		for (int v = 0; v < 4; v++) {
 			int c = vChan[v];
 			if (c >= maxChan) c = maxChan - 1;
 			float vL = 0.f, vR = 0.f;

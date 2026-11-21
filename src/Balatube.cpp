@@ -333,19 +333,19 @@ struct Balatube : Module {
 
 	Balatube() {
 		config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-		configParam(TUNE_PARAM, -24.f, 24.f, 0.f, "Tune", " semitones");
+		configParam(TUNE_PARAM, -24.f, 24.f, -12.f, "Tune", " semitones");
 		configParam(DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay");
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.8f, "Level");
-		configParam(RATE_PARAM, 0.f, 1.f, 0.3f, "Rate");
-		configParam(DEPTH_PARAM, 0.f, 1.f, 0.4f, "Depth");
-		configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.5f, "Feedback");
-		configParam(COLOR_PARAM, 0.f, 1.f, 0.5f, "Color");
+		configParam(RATE_PARAM, 0.f, 1.f, 0.4f, "Rate");
+		configParam(DEPTH_PARAM, 0.f, 1.f, 0.5f, "Depth");
+		configParam(FEEDBACK_PARAM, 0.f, 1.f, 0.889157f, "Feedback");
+		configParam(COLOR_PARAM, 0.f, 1.f, 0.0f, "Color");
 		configParam(MIX_PARAM, 0.f, 1.f, 0.0f, "Mix");
 		configParam(MATERIAL_PARAM, 0.f, 1.f, 0.f, "Material (Wood -> PVC)");
 		configParam(DRIVE_PARAM, 0.f, 1.f, 0.3f, "Drive");
-		configParam(OD_MIX_PARAM, 0.f, 1.f, 0.f, "Overdrive Mix");
-		configParam(CRUNCH_PARAM, 0.f, 1.f, 0.f, "Crunch");
-		configParam(EXT_MIX_PARAM, 0.f, 1.f, 1.f, "External Mix");
+		configParam(OD_MIX_PARAM, 0.f, 1.f, 0.0f, "Overdrive Mix");
+		configParam(CRUNCH_PARAM, 0.f, 1.f, 0.0f, "Crunch");
+		configParam(EXT_MIX_PARAM, 0.f, 1.f, 0.016867f, "External Mix");
 		configInput(TRIG_INPUT, "Trigger");
 		configInput(VOCT_INPUT, "V/Oct");
 		configInput(RATE_CV_INPUT, "Rate CV");
