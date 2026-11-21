@@ -11,7 +11,7 @@ Physically-modeled percussion voice: MATERIAL sweeps from balafon / marimba bar 
 Keyboard mapper: 46 assignable keys, momentary/toggle, fader/knob with height & velocity (0–60s), Morse and Random modes, 3-unit expander, localized overlay.
 
 ### Membrane (`Membrane`)
-Morphing modal drum: MATERIAL slides from a double-membrane taiko through a goblet djembe to a plastic darbuka. 3 voices with a per-channel rotor, stereo out, Exciter for the attack and Harmonics for saturation, full per-knob CV.
+Morphing modal drum: MATERIAL slides from a double leather patch to a plastic patch. 4 voices with a per-channel rotor, stereo out, Exciter for the attack and Harmonics for saturation.
 
 ## Build
 
