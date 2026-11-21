@@ -189,6 +189,16 @@ struct Membrane : Module {
 				}
 			}
 
+			// Early-out: si no hay envelopes ni excitación, salta bucles.
+			{
+				bool anyEnv = false;
+				for (int i = 0; i < NUM_MODES; i++)
+					if (envA[i] > 1e-6f || envR[i] > 1e-6f || envB[i] > 1e-6f) { anyEnv = true; break; }
+				if (!anyEnv && exciteLeft == 0 && slapEnv < 1e-6f && subEnv < 1e-6f && sub2Env < 1e-6f) {
+					outL = 0.f; outR = 0.f; active = false; return;
+				}
+			}
+
 			// --- Click de ataque: 12ms ruido brillante, pasa-bajos (sin spikes) ---
 			float click = 0.f;
 			if (exciteLeft > 0) {
@@ -403,6 +413,12 @@ struct Membrane : Module {
 	float roomLpA = 0.f, roomLpB = 0.f;
 	float roomDampC = 0.3f;
 
+	// Cache para frecuencias fijas por (Tune, V/Oct, Material, sampleRate,
+	// djembePitch, darbukaPitch); recompute solo si cambia algo.
+	float freqCacheTune = -1e9f, freqCacheVoct = -1e9f, freqCacheMat = -1e9f;
+	float freqCacheSR = -1e9f, freqCacheDjp = -1e9f, freqCacheDp = -1e9f;
+	float freqCacheVal = 0.f;
+
 	void roomProcess(float x, float sampleRate, float &wetL, float &wetR) {
 		int sr = (int)sampleRate;
 		if (sr != roomSR || roomA.empty()) {
@@ -478,7 +494,13 @@ struct Membrane : Module {
 			if (djembePitch < 0.70f) djembePitch = 0.70f;
 			float darbukaPitch = 1.f + 0.45f * fmaxf(0.f, (material - 0.5f) * 2.f);
 			float darbukaTime = 1.f - 0.60f * fmaxf(0.f, (material - 0.5f) * 2.f);
-			float freq = 180.f * powf(2.f, (tune + voct * 12.f) / 12.f) * djembePitch * darbukaPitch;
+			if (freqCacheTune != tune || freqCacheVoct != voct || freqCacheMat != material
+			    || freqCacheSR != args.sampleRate || freqCacheDjp != djembePitch || freqCacheDp != darbukaPitch) {
+				freqCacheTune = tune; freqCacheVoct = voct; freqCacheMat = material;
+				freqCacheSR = args.sampleRate; freqCacheDjp = djembePitch; freqCacheDp = darbukaPitch;
+				freqCacheVal = 180.f * powf(2.f, (tune + voct * 12.f) / 12.f) * djembePitch * darbukaPitch;
+			}
+			float freq = freqCacheVal;
 			freq = clamp(freq, 30.f, args.sampleRate * 0.45f);
 			float vel = inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getNormalPolyVoltage(10.f, c) / 10.f, 0.f, 1.f) : 1.f;
 			float level = params[LEVEL_PARAM].getValue() * vel;
@@ -508,6 +530,13 @@ struct Membrane : Module {
 			voices[v].process(chFreq[c], chT60[c], args.sampleRate, chMat[c], vL, vR, chDarbT[c], chHarm[c], chExc[c], chVel[c]);
 			outMixL += vL * chLevel[c];
 			outMixR += vR * chLevel[c];
+		}
+		if (fabsf(outMixL) + fabsf(outMixR) < 1e-6f) {
+			outputs[OUT_OUTPUT].setVoltage(0.f);
+			outputs[OUT_OUTPUT].setChannels(1);
+			outputs[OUT_RIGHT].setVoltage(0.f);
+			outputs[OUT_RIGHT].setChannels(1);
+			return;
 		}
 		// Room global + limitador enlazado global.
 		float wetL = 0.f, wetR = 0.f;
