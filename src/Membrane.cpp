@@ -445,7 +445,7 @@ struct Membrane : Module {
 		configParam(TUNE_PARAM, -24.f, 24.f, -12.f, "Tune", " semitones");
 		configParam(DECAY_PARAM, 0.05f, 4.f, 2.0f, "Decay", " s");
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.75f, "Level");
-		configParam(MATERIAL_PARAM, 0.f, 1.f, 0.f, "Material Leatherx2<>Leatherx1<>Plastic");
+		configParam(MATERIAL_PARAM, 0.f, 1.f, 0.f, "Material double leather patch<>plastic patch");
 		configParam(EXCITE_PARAM, 0.f, 1.f, 1.f, "Exciter");
 		configParam(DRIVE_PARAM, 0.f, 2.f, 0.5f, "Harmonics");
 		configInput(TRIG_INPUT, "Gate");

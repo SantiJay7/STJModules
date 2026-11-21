@@ -613,6 +613,14 @@ struct BalatubeWidget : ModuleWidget {
 		// fit the logo in the center.
 		const float C1 = 12.f, C2 = 33.5f, C3 = 58.f, C4 = 79.5f;
 
+		auto coloredKnob = [&](math::Vec posMm, Balatube::ParamIds id, bool overdrive) -> RoundBlackKnob* {
+			RoundBlackKnob* knob = createParamCentered<RoundBlackKnob>(posMm, module, id);
+			knob->setSvg(Svg::load(asset::plugin(pluginInstance, overdrive ? "res/RoundBlackKnobOverdrive.svg" : "res/RoundBlackKnobFlanger.svg")));
+			knob->bg->setSvg(Svg::load(asset::plugin(pluginInstance, overdrive ? "res/RoundBlackKnobOverdrive_bg.svg" : "res/RoundBlackKnobFlanger_bg.svg")));
+			addParam(knob);
+			return knob;
+		};
+
 		// --- Section 1: Modal resonator ---
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C1, 23)), module, Balatube::TUNE_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C2, 23)), module, Balatube::DECAY_PARAM));
@@ -620,15 +628,15 @@ struct BalatubeWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C4, 23)), module, Balatube::MATERIAL_PARAM));
 
 		// --- Section 2: Effects (Flanger row, then Overdrive/Mix row) ---
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C1, 40)), module, Balatube::RATE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C2, 40)), module, Balatube::DEPTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C3, 40)), module, Balatube::FEEDBACK_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C4, 40)), module, Balatube::COLOR_PARAM));
+		coloredKnob(mm2px(Vec(C1, 40)), Balatube::RATE_PARAM, false);
+		coloredKnob(mm2px(Vec(C2, 40)), Balatube::DEPTH_PARAM, false);
+		coloredKnob(mm2px(Vec(C3, 40)), Balatube::FEEDBACK_PARAM, false);
+		coloredKnob(mm2px(Vec(C4, 40)), Balatube::COLOR_PARAM, false);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C1, 52.5)), module, Balatube::CRUNCH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C2, 52.5)), module, Balatube::DRIVE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C3, 52.5)), module, Balatube::OD_MIX_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(C4, 52.5)), module, Balatube::MIX_PARAM));
+		coloredKnob(mm2px(Vec(C1, 52.5)), Balatube::CRUNCH_PARAM, true);
+		coloredKnob(mm2px(Vec(C2, 52.5)), Balatube::DRIVE_PARAM, true);
+		coloredKnob(mm2px(Vec(C3, 52.5)), Balatube::OD_MIX_PARAM, true);
+		coloredKnob(mm2px(Vec(C4, 52.5)), Balatube::MIX_PARAM, false);
 
 		// --- Section 3: CV, one input per knob above, same columns ---
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(C1, 69.5)), module, Balatube::TUNE_CV_INPUT));
